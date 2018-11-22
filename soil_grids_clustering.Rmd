@@ -1,0 +1,127 @@
+---
+author: '[Matt Lowes](mailto:email@oneacrefund.org)'
+date: '`r format(Sys.time(), "%B %d, %Y")`'
+output:
+  html_notebook:
+    number_sections: yes
+    code_folding: hide
+    theme: flatly
+    toc: yes
+    toc_depth: 6
+    toc_float: yes
+    css: static/styles.css
+---
+<title>Title</title>
+```{r setup, include=FALSE}
+#### set up
+## clear environment and console
+rm(list = ls())
+cat("\014")
+
+## set up some global options
+# always set stringsAsFactors = F when loading data
+options(stringsAsFactors=FALSE)
+
+# show the code
+knitr::opts_chunk$set(echo = TRUE)
+
+# define all knitr tables to be html format
+options(knitr.table.format = 'html')
+
+# change code chunk default to not show warnings or messages
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+## load libraries
+# dplyr and tibble are for working with tables
+# reshape is for easy table transformation
+# knitr is to make pretty tables at the end
+# ggplot2 is for making graphs
+# readxl is for reading in Excel files
+# MASS is for running boxcox tests
+# gridExtra is for arranging plots
+# cowplot is for adding subtitles to plots
+# robustbase is to run robust regressions to compensate for outliers
+# car is for performing logit transformations
+libs <- c("tidyverse", "knitr", "readxl", "curl", "raster", "rgdal")
+lapply(libs, require, character.only = T, quietly = T, warn.conflicts = F)
+
+#### define helpful functions
+# define function to adjust table widths
+html_table_width <- function(kable_output, width) {
+  width_html <- paste0(paste0('<col width="', width, '">'), collapse = "\n")
+  sub("<table>", paste0("<table>\n", width_html), kable_output)
+}
+options(readr.show_progress = FALSE)
+select <- dplyr::select
+```
+
+# Objectives
+
+We're trying to make soil classes for 1AF Kenya to inform the placement of on-farm nutrient omission trials. This analysis accesses data from the [AfSIS soil grids project](http://data.isric.org/geonetwork/srv/eng/catalog.search#/home), combines them into a feature set and identifies clusters across sampling units to inform trial placement. 
+
+# Data
+
+Most of the data have been zipped. I'm just goint to manually unzip it to simplify the process. Here's the complete list of the data I've tried to access from the online repository:
+
+* Africa SoilGrids pH (predictions for pH H2O (*10) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
+* Africa SoilGrids organic C (predictions for SOC (g/kg) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
+* Africa SoilGrids total N 2017 (predictions for TN (mg/kg) for 0-30 cm
+* Africa SoilGrids texture (textural classes derived from predictions for sand, silt & clay for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
+* Africa SoilGrids root zone texture (textural classes derived from predictions for sand, silt & clay for 0-30 cm (also available for the rootable depth) with a resolution of 1km
+* Africa SoilGrids sand (predictions for sand content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
+* Africa SoilGrids silt (predictions for silt content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
+* Africa SoilGrids clay (predictions for clay content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
+* Africa SoilGrids CEC (predictions for CEC (cmolc/kg) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
+* Africa SoilGrids P (predictions for available P, according to Mehlich 3 (mg/100kg; thus divide by 100 for ppm) for 0-30 cm 
+* Africa SoilGrids P (predictions for total P (mg/kg) for 0-30 cm
+* Africa SoilGrids root zone coarse (predictions for coarse fragments content (v%) for 0-30 cm (also for rootable depth) at 1km resolution
+* Africa SoilGrids root zone (derived maps for rootable depth (cm), and other properties aggregated over 0-30 cm as well as over root zone depth, at 1 km resolution 
+
+```{r}
+dataDir <- normalizePath(file.path("..", "soil_grids_data"))
+
+tifFiles <- paste0(dataDir, "/", list.files(dataDir, pattern = ".tif$"))
+
+```
+
+I want to import all of these rasters but it's important that they be clearly grouped so that I can create weighted layers for all N, C, P, etc. before combining them into a single data frame. The following functions will import the selected rasters then perform the necessary calculations to prepare that soil nutrient feature for the end analysis.
+
+```{r}
+if(!file.exists(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))){
+keBoundaries <- getData("GADM", country='KE', level=2, path = dataDir) 
+} else {
+  keBoundaries <- readRDS(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))
+}
+
+importRasterAsList <- function(listInput){
+  rasterFile = raster(listInput)
+}
+
+combineRasters <- function(rasterList){
+  brick = brick(rasterList)
+}
+
+cropRasterToKenya <- function(rasterList){
+  # crop Africa rasters to Kenya but first make sure that it is the same coordinate system
+  
+}
+
+# raster calculations can be done directly
+
+testInput <- tifFiles[grep("af_ORCDRC_T__M", tifFiles)]
+
+test <- lapply(testInput, function(x){importRasterAsList(x)})
+```
+
+Organize the soil layers into the correct categories for import and summary
+
+```{r}
+
+```
+
+
+
+
+# Output
+
+# Appendix
