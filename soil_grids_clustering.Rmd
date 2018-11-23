@@ -93,6 +93,8 @@ tifFiles <- paste0(dataDir, "/", list.files(dataDir, pattern = ".tif$"))
 
 I want to import all of these rasters but it's important that they be clearly grouped so that I can create weighted layers for all N, C, P, etc. before combining them into a single data frame. The following functions will import the selected rasters then perform the necessary calculations to prepare that soil nutrient feature for the end analysis.
 
+The overall soil rasters are too big to do the calculations first (even if I'm doing them as efficiently as possible which I may not be). Therefore I first need to trim the larger raster down to just Kenya before calculating the weights and averages.
+
 ```{r}
 if(!file.exists(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))){
 keBoundaries <- getData("GADM", country='KE', level=2, path = dataDir) 
@@ -107,33 +109,32 @@ importRasterAsList <- function(listInput){
 }
 
 
-applySamplingWeights <- function(rasterList, weightList){
-  # apply weights to the raster data in the raster list before creating a 
-  # raster stack
-  if(length(rasterList)==length(weightList)){
-    updatedValues = lapply(1:length(rasterList), function(x){
-      values(rasterList[[x]]) * weightList[[x]]
-    })
-    
-    # and then udpate the values in rasterList
-    
-    
-  } else {
-    cat("There aren't weights for all the raster layers. Please update")
-  }
-}
+# rasterList <- importRasterAsList(testInput)
+# 
+# weightList <- c(1/6, 1/3, 1/2)
 
-combineRasters <- function(rasterList){
+combineRasters <- function(rasterList, weightList){
   # converts a raster list to a raster stack for analysis
-  stack = stack(rasterList)
-}
-
-
-
-cropRasterToKenya <- function(rasterList){
-  # crop Africa rasters to Kenya but first make sure that it is the same coordinate system
+  #stack = stack(rasterList)
+  #if(length(rasterList)==length(weightList)){
+    
+    
+    r = lapply(1:length(rasterList), function(x){
+        calc(rasterList[[x]], function(y) y * weightList[[x]])
+      })
+    
+    r = mean(stack(r))
+    return(r)
+    
+    
+  # } else {
+  #   cat("There aren't weights for all the raster layers. Please reconcile the weights")
+  # }
   
 }
+
+
+
 
 # raster calculations can be done directly
 
@@ -145,17 +146,22 @@ testList <- importRasterAsList(testInput)
 Organize the soil layers into the correct categories for import and summary
 
 ```{r}
-test <- combineRasters(importRasterAsList(testInput))
+test <- combineRasters(importRasterAsList(testInput), weightList)
 nlayers(test)
 
 
-test <- importRasterAsList(testInput)
 
-weightList <- c(1/6, 1/3, 1/2)
 
 test2 <- applySamplingWeights(test, weightList)
 ```
 
+```{r}
+cropRasterToKenya <- function(rasterList){
+  # crop Africa rasters to Kenya but first make sure that it is the same coordinate system
+  
+}
+
+```
 
 
 
