@@ -63,19 +63,26 @@ We're trying to make soil classes for 1AF Kenya to inform the placement of on-fa
 
 Most of the data have been zipped. I'm just goint to manually unzip it to simplify the process. Here's the complete list of the data I've tried to access from the online repository:
 
-* Africa SoilGrids pH (predictions for pH H2O (*10) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
-* Africa SoilGrids organic C (predictions for SOC (g/kg) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
-* Africa SoilGrids total N 2017 (predictions for TN (mg/kg) for 0-30 cm
-* Africa SoilGrids texture (textural classes derived from predictions for sand, silt & clay for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
-* Africa SoilGrids root zone texture (textural classes derived from predictions for sand, silt & clay for 0-30 cm (also available for the rootable depth) with a resolution of 1km
-* Africa SoilGrids sand (predictions for sand content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
-* Africa SoilGrids silt (predictions for silt content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
-* Africa SoilGrids clay (predictions for clay content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
-* Africa SoilGrids CEC (predictions for CEC (cmolc/kg) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average
+* Africa SoilGrids pH (predictions for pH H2O (10) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_PHIHOX_T__M_sd1_250m.tif**)
+* Africa SoilGrids organic C (predictions for SOC (g/kg) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_ORCDRC_T__M_sd1_250m (1).tif**)
+* Africa SoilGrids total N 2017 (predictions for TN (mg/kg) for 0-30 cm (**af250m_nutrient_n_m_agg30cm.tif**)
+* Africa SoilGrids texture (textural classes derived from predictions for sand, silt & clay for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_TEXMHT_T__M_sd1_250m (1).tif**)
+* Africa SoilGrids root zone texture (textural classes derived from predictions for sand, silt & clay for 0-30 cm (also available for the rootable depth) with a resolution of 1km (**af_agg_30cm_TEXCLSS__M_1km.tif**)
+* Africa SoilGrids sand (predictions for sand content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_SNDPPT_T__M_sd1_250m (1).tif**)
+* Africa SoilGrids silt (predictions for silt content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_SLTPPT_T__M_sd1_250m (1).tif**)
+* Africa SoilGrids clay (predictions for clay content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_CLYPPT_T__M_sd1_250m (1).tif**)
+* Africa SoilGrids CEC (predictions for CEC (cmolc/kg) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_CEC_T__M_sd1_250m.tif**)
 * Africa SoilGrids P (predictions for available P, according to Mehlich 3 (mg/100kg; thus divide by 100 for ppm) for 0-30 cm 
-* Africa SoilGrids P (predictions for total P (mg/kg) for 0-30 cm
-* Africa SoilGrids root zone coarse (predictions for coarse fragments content (v%) for 0-30 cm (also for rootable depth) at 1km resolution
-* Africa SoilGrids root zone (derived maps for rootable depth (cm), and other properties aggregated over 0-30 cm as well as over root zone depth, at 1 km resolution 
+* Africa SoilGrids P (predictions for total P (mg/kg) for 0-30 cm (**af250m_nutrient_p_t_m_agg30cm.tif**)
+* Africa SoilGrids root zone coarse (predictions for coarse fragments content (v%) for 0-30 cm (also for rootable depth) at 1km resolution (**af_agg_30cm_CRFVOL__M_1km.tif**)
+* Africa SoilGrids root zone (derived maps for rootable depth (cm), and other properties aggregated over 0-30 cm as well as over root zone depth, at 1 km resolution (**af_ERZD__M_1km.tif**)
+
+And Johan clarified that the weights refer to amount of soil depth:
+the weights refer to the depth intervals :
+
+* 0-5 = 5/30 - this refers to `sd1` in the file names
+* 5-15 = 10/30 - this refers to `sd2` in the file names
+* 15-30 = 15/30 - this refers to `sd3` in the file names
 
 ```{r}
 dataDir <- normalizePath(file.path("..", "soil_grids_data"))
@@ -94,12 +101,34 @@ keBoundaries <- getData("GADM", country='KE', level=2, path = dataDir)
 }
 
 importRasterAsList <- function(listInput){
-  rasterFile = raster(listInput)
+  # import the relevant files for the soil layer
+  # outputs a raster list
+  rasterFile = lapply(listInput, function(x) raster(x))
+}
+
+
+applySamplingWeights <- function(rasterList, weightList){
+  # apply weights to the raster data in the raster list before creating a 
+  # raster stack
+  if(length(rasterList)==length(weightList)){
+    updatedValues = lapply(1:length(rasterList), function(x){
+      values(rasterList[[x]]) * weightList[[x]]
+    })
+    
+    # and then udpate the values in rasterList
+    
+    
+  } else {
+    cat("There aren't weights for all the raster layers. Please update")
+  }
 }
 
 combineRasters <- function(rasterList){
-  brick = brick(rasterList)
+  # converts a raster list to a raster stack for analysis
+  stack = stack(rasterList)
 }
+
+
 
 cropRasterToKenya <- function(rasterList){
   # crop Africa rasters to Kenya but first make sure that it is the same coordinate system
@@ -110,13 +139,21 @@ cropRasterToKenya <- function(rasterList){
 
 testInput <- tifFiles[grep("af_ORCDRC_T__M", tifFiles)]
 
-test <- lapply(testInput, function(x){importRasterAsList(x)})
+testList <- importRasterAsList(testInput)
 ```
 
 Organize the soil layers into the correct categories for import and summary
 
 ```{r}
+test <- combineRasters(importRasterAsList(testInput))
+nlayers(test)
 
+
+test <- importRasterAsList(testInput)
+
+weightList <- c(1/6, 1/3, 1/2)
+
+test2 <- applySamplingWeights(test, weightList)
 ```
 
 
