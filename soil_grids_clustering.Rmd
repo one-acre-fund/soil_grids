@@ -63,19 +63,31 @@ We're trying to make soil classes for 1AF Kenya to inform the placement of on-fa
 
 Most of the data have been zipped. I'm just goint to manually unzip it to simplify the process. Here's the complete list of the data I've tried to access from the online repository:
 
-* Africa SoilGrids pH (predictions for pH H2O (10) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_PHIHOX_T__M_sd1_250m.tif**)
-* Africa SoilGrids organic C (predictions for SOC (g/kg) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_ORCDRC_T__M_sd1_250m (1).tif**)
-* Africa SoilGrids total N 2017 (predictions for TN (mg/kg) for 0-30 cm (**af250m_nutrient_n_m_agg30cm.tif**)
-* Africa SoilGrids texture (textural classes derived from predictions for sand, silt & clay for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_TEXMHT_T__M_sd1_250m (1).tif**)
-* Africa SoilGrids root zone texture (textural classes derived from predictions for sand, silt & clay for 0-30 cm (also available for the rootable depth) with a resolution of 1km (**af_agg_30cm_TEXCLSS__M_1km.tif**)
-* Africa SoilGrids sand (predictions for sand content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_SNDPPT_T__M_sd1_250m (1).tif**)
-* Africa SoilGrids silt (predictions for silt content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_SLTPPT_T__M_sd1_250m (1).tif**)
-* Africa SoilGrids clay (predictions for clay content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_CLYPPT_T__M_sd1_250m (1).tif**)
-* Africa SoilGrids CEC (predictions for CEC (cmolc/kg) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average (**af_CEC_T__M_sd1_250m.tif**)
+* Africa SoilGrids pH (predictions for pH H2O (10) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_PHIHOX_T__M_sd1_250m.tif**
+* Africa SoilGrids organic C (predictions for SOC (g/kg) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_ORCDRC_T__M_sd1_250m.tif**
+* Africa SoilGrids total N 2017 (predictions for TN (mg/kg) for 0-30 cm   
+    + **af250m_nutrient_n_m_agg30cm.tif**
+* Africa SoilGrids texture (textural classes derived from predictions for sand, silt & clay for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_TEXMHT_T__M_sd1_250m.tif**
+* Africa SoilGrids root zone texture (textural classes derived from predictions for sand, silt & clay for 0-30 cm (also available for the rootable depth) with a resolution of 1km 
+    + **af_agg_30cm_TEXCLSS__M_1km.tif**
+* Africa SoilGrids sand (predictions for sand content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_SNDPPT_T__M_sd1_250m.tif**
+* Africa SoilGrids silt (predictions for silt content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_SLTPPT_T__M_sd1_250m.tif**
+* Africa SoilGrids clay (predictions for clay content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_CLYPPT_T__M_sd1_250m.tif**
+* Africa SoilGrids CEC (predictions for CEC (cmolc/kg) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_CEC_T__M_sd1_250m.tif**
 * Africa SoilGrids P (predictions for available P, according to Mehlich 3 (mg/100kg; thus divide by 100 for ppm) for 0-30 cm 
-* Africa SoilGrids P (predictions for total P (mg/kg) for 0-30 cm (**af250m_nutrient_p_t_m_agg30cm.tif**)
-* Africa SoilGrids root zone coarse (predictions for coarse fragments content (v%) for 0-30 cm (also for rootable depth) at 1km resolution (**af_agg_30cm_CRFVOL__M_1km.tif**)
-* Africa SoilGrids root zone (derived maps for rootable depth (cm), and other properties aggregated over 0-30 cm as well as over root zone depth, at 1 km resolution (**af_ERZD__M_1km.tif**)
+* Africa SoilGrids P (predictions for total P (mg/kg) for 0-30 cm         
+    + **af250m_nutrient_p_t_m_agg30cm.tif**
+* Africa SoilGrids root zone coarse (predictions for coarse fragments content (v%) for 0-30 cm (also for rootable depth) at 1km resolution 
+    + **af_agg_30cm_CRFVOL__M_1km.tif**
+* Africa SoilGrids root zone (derived maps for rootable depth (cm), and other properties aggregated over 0-30 cm as well as over root zone depth, at 1 km resolution 
+    + **af_ERZD__M_1km.tif**
 
 And Johan clarified that the weights refer to amount of soil depth:
 the weights refer to the depth intervals :
@@ -83,6 +95,15 @@ the weights refer to the depth intervals :
 * 0-5 = 5/30 - this refers to `sd1` in the file names
 * 5-15 = 10/30 - this refers to `sd2` in the file names
 * 15-30 = 15/30 - this refers to `sd3` in the file names
+
+```{r}
+firstWeight <- 5/30
+secondWeight <- 10/30
+thirdWeight <- 15/30
+
+weightList <- list(firstWeight, secondWeight, thirdWeight)
+```
+
 
 ```{r}
 dataDir <- normalizePath(file.path("..", "soil_grids_data"))
@@ -95,9 +116,11 @@ I want to import all of these rasters but it's important that they be clearly gr
 
 The overall soil rasters are too big to do the calculations first (even if I'm doing them as efficiently as possible which I may not be). Therefore I first need to trim the larger raster down to just Kenya before calculating the weights and averages.
 
+## Kenya boundaries
+
 ```{r}
 if(!file.exists(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))){
-  keBoundaries <- getData("GADM", country='KE', level=1, path = dataDir) 
+  keBoundaries <- getData("GADM", country='KE', level=2, path = dataDir) 
 } else {
   keBoundaries <- readRDS(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))
 }
@@ -105,16 +128,81 @@ if(!file.exists(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))){
 ## transform the shape file to the correct CRS system
 keBoundaries <- spTransform(keBoundaries, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
 
+
+# I additionally want to subset this down to just western Kenya because it's too computationally intentsive to run these calculations for other areas. I'm going to subset the shape file to just western Kenya and the plot it to confirm I've done it correctly.
+
+# from Name 1
+westernAreas <- c("Bungoma", "Busia", "Elgeyo-Marakwet", "Homa Bay", "Kakamega", "Kericho", "Kisii", "Kisumu", "Migori", "Nyamira", "Siaya", "Vihiga")
+
+westernMap <- keBoundaries[match(tolower(westernAreas), tolower(keBoundaries$NAME_1)),]
+
+plot(westernMap)
+```
+
+```{r}
+plot(keBoundaries)
+```
+
+
+## Applying weights
+
+It's not going to be very elegant but I'm going to manually apply the weights to the soil layers because I can't figure out a more efficient way to do this. Ultimately I probably want that in a separate data preparation script but for the time being I'll just have it save a final file that I won't refresh unless I need to. 
+
+```{r}
+tifFinder <- function(input){
+  tifFiles[grep(input, tifFiles)]
+}
+
+
 importRasterAsList <- function(listInput){
   # import the relevant files for the soil layer
   # outputs a raster list
   rasterFile = lapply(listInput, function(x) raster(x))
 }
 
+combineRasters <- function(rasterList, weightList){
+  
+    
+    r = Map("*", rasterList, weightList)
+    
+    r = mean(stack(r))
+    return(r)
+  
+}
+```
+
+```{r}
+rasterList <- importRasterAsList(tifFinder("af_PHIHOX_T__M"))
+
+test <- Map("*", rasterList, weightList)
+
+secondTest <- stack(test)
+
+thirdTest <- mean(secondTest)
+```
+
+
+```{r eval=FALSE, include=FALSE}
+#ph
+pHLayer <- mean(importRasterAsList(tifFinder("af_PHIHOX_T__M_sd1"))[[1]] * firstWeight, importRasterAsList(tifFinder("af_PHIHOX_T__M_sd2"))[[1]] * secondWeight, importRasterAsList(tifFinder("af_PHIHOX_T__M_sd3"))[[1]] * thirdWeight)
+
+writeRaster(pHLayer, file = paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+
+
+```
+
+
+## Building layers
+
+```{r}
+
+
 
 cropRaster <- function(rasterObj, borders){
   cropped = crop(rasterObj, borders)
 }
+
+
 
 test <- crop(testList[[1]], keBoundaries)
 plot(test)
@@ -128,25 +216,7 @@ testList[[1]][keBoundaries,]
 # 
 # weightList <- c(1/6, 1/3, 1/2)
 
-combineRasters <- function(rasterList, weightList){
-  # converts a raster list to a raster stack for analysis
-  #stack = stack(rasterList)
-  #if(length(rasterList)==length(weightList)){
-    
-    
-    r = lapply(1:length(rasterList), function(x){
-        calc(rasterList[[x]], function(y) y * weightList[[x]])
-      })
-    
-    r = mean(stack(r))
-    return(r)
-    
-    
-  # } else {
-  #   cat("There aren't weights for all the raster layers. Please reconcile the weights")
-  # }
-  
-}
+
 
 
 
