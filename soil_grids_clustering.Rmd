@@ -139,7 +139,7 @@ westernMap <- keBoundaries[match(tolower(westernAreas), tolower(keBoundaries$NAM
 plot(westernMap)
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 plot(keBoundaries)
 ```
 
@@ -150,6 +150,8 @@ It's not going to be very elegant but I'm going to manually apply the weights to
 
 ```{r}
 tifFinder <- function(input){
+  # finds the right layers from the full set of input data, tifFiles
+  #outputs list of those files.
   tifFiles[grep(input, tifFiles)]
 }
 
@@ -160,18 +162,19 @@ importRasterAsList <- function(listInput){
   rasterFile = lapply(listInput, function(x) raster(x))
 }
 
-combineRasters <- function(rasterList, weightList){
+addWeights <- function(rasterList, weightList){
   
-    
+  # confirm that this approach gives the same result as doing it manually.
+  # confirmed that this is leading to same result!
+  
+  # make sure it's in order!
     r = Map("*", rasterList, weightList)
-    
-    r = mean(stack(r))
     return(r)
   
 }
 ```
 
-```{r}
+```{r, scrap}
 rasterList <- importRasterAsList(tifFinder("af_PHIHOX_T__M"))
 
 test <- Map("*", rasterList, weightList)
@@ -184,10 +187,26 @@ thirdTest <- mean(secondTest)
 
 ```{r eval=FALSE, include=FALSE}
 #ph
-pHLayer <- mean(importRasterAsList(tifFinder("af_PHIHOX_T__M_sd1"))[[1]] * firstWeight, importRasterAsList(tifFinder("af_PHIHOX_T__M_sd2"))[[1]] * secondWeight, importRasterAsList(tifFinder("af_PHIHOX_T__M_sd3"))[[1]] * thirdWeight)
+# pHLayer <- mean(importRasterAsList(tifFinder("af_PHIHOX_T__M_sd1"))[[1]] * firstWeight, importRasterAsList(tifFinder("af_PHIHOX_T__M_sd2"))[[1]] * secondWeight, importRasterAsList(tifFinder("af_PHIHOX_T__M_sd3"))[[1]] * thirdWeight)
+
+# ph but with functions
+pHLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_PHIHOX_T__M")))))
+
 
 writeRaster(pHLayer, file = paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 
+# carbon
+
+
+# texture
+
+# sand content
+
+# silt content
+ 
+# clay content
+
+# CEC
 
 ```
 
@@ -248,7 +267,11 @@ cropRasterToKenya <- function(rasterList){
 
 ```
 
+# Stacking data
 
+# Clustering Code
+
+# Clustering analysis
 
 # Output
 
