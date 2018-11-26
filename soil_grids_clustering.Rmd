@@ -291,32 +291,6 @@ soilStack <- stack(pHLayer, carbonLayer, textureLayer, sandLayer, clayLayer, cec
 soilDat <- crop(soilStack, extent(keBoundaries))
 
 soilDat <- mask(soilDat, keBoundaries)
-
-# raster calculations can be done directly
-
-testInput <- tifFiles[grep("af_ORCDRC_T__M", tifFiles)]
-
-testList <- importRasterAsList(testInput)
-```
-
-Organize the soil layers into the correct categories for import and summary
-
-```{r}
-test <- combineRasters(importRasterAsList(testInput), weightList)
-nlayers(test)
-
-
-
-
-test2 <- applySamplingWeights(test, weightList)
-```
-
-```{r}
-cropRasterToKenya <- function(rasterList){
-  # crop Africa rasters to Kenya but first make sure that it is the same coordinate system
-  
-}
-
 ```
 
 # Clustering Code
