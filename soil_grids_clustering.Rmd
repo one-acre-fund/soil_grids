@@ -172,6 +172,8 @@ addWeights <- function(rasterList, weightList){
     return(r)
   
 }
+
+
 ```
 
 
@@ -179,56 +181,116 @@ addWeights <- function(rasterList, weightList){
 #ph
 # pHLayer <- mean(importRasterAsList(tifFinder("af_PHIHOX_T__M_sd1"))[[1]] * firstWeight, importRasterAsList(tifFinder("af_PHIHOX_T__M_sd2"))[[1]] * secondWeight, importRasterAsList(tifFinder("af_PHIHOX_T__M_sd3"))[[1]] * thirdWeight)
 
+forceUpdate <- FALSE
+
 # ph but with functions
-pHLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_PHIHOX_T__M")))))
-
-
-writeRaster(pHLayer, file = paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+if(!file.exists(paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/") | forceUpdate)){
+  pHLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_PHIHOX_T__M")))))
+  
+  writeRaster(pHLayer, file = paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+} else {
+  pHLayer <- raster(paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/"))
+}
 
 # carbon
-
+if(!file.exists(paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/") | forceUpdate)){
+  carbonLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_ORCDRC_T__M")))))
+  
+  writeRaster(carbonLayer, file = paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+} else {
+  carbonLayer <- raster(paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/"))
+}
 
 # texture
+if(!file.exists(paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/") | forceUpdate)){
+  textureLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_TEXMHT_T__M")))))
+  
+  writeRaster(textureLayer, file = paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+} else {
+  textureLayer <- raster(paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/"))
+}
 
 # sand content
-
+if(!file.exists(paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/") | forceUpdate)){
+  sandLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_SNDPPT_T__M")))))
+  
+  writeRaster(sandLayer, file = paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+} else {
+  
+}
 # silt content
- 
+if(!file.exists(paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/") | forceUpdate)){
+  siltLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_SLTPPT_T__M")))))
+  
+  writeRaster(siltLayer, file = paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+} else {
+  siltLayer <- raster(paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/"))
+}
+
 # clay content
+if(!file.exists(paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/") | forceUpdate)){
+  clayLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_CLYPPT_T__M")))))
+  
+  writeRaster(clayLayer, file = paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+} else {
+  clayLayer <- raster(paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/"))
+}
 
 # CEC
+if(!file.exists(paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/") | forceUpdate)){
+  cecLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_CEC_T__M")))))
+  
+  writeRaster(cecLayer, file = paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+} else {
+  cecLayer <- raster(paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/"))
+}
+```
+
+## Importing other layers
+
+This summary repeats content from above:
+
+* Africa SoilGrids root zone texture (textural classes derived from predictions for sand, silt & clay for 0-30 cm (also available for the rootable depth) with a resolution of 1km 
+    + **af_agg_30cm_TEXCLSS__M_1km.tif**
+* Africa SoilGrids P (predictions for available P, according to Mehlich 3 (mg/100kg; thus divide by 100 for ppm) for 0-30 cm 
+* Africa SoilGrids P (predictions for total P (mg/kg) for 0-30 cm         
+    + **af250m_nutrient_p_t_m_agg30cm.tif**
+* Africa SoilGrids root zone coarse (predictions for coarse fragments content (v%) for 0-30 cm (also for rootable depth) at 1km resolution 
+    + **af_agg_30cm_CRFVOL__M_1km.tif**
+* Africa SoilGrids root zone (derived maps for rootable depth (cm), and other properties aggregated over 0-30 cm as well as over root zone depth, at 1 km resolution 
+    + **af_ERZD__M_1km.tif**
+    
+    
+I'm importing these directly because it's not computationally intensive to do so.
+
+```{r}
+zoneTextureLayer <- importRasterAsList(tifFinder("af_agg_30cm_TEXCLSS__M_1km.tif"))[[1]]
+
+phosLayer <- importRasterAsList(tifFinder("af250m_nutrient_p_t_m_agg30cm.tif"))[[1]]
+
+zoneCoarseLayer <- importRasterAsList(tifFinder("af_agg_30cm_CRFVOL__M_1km.tif"))[[1]]
+
+zoneLayer <- importRasterAsList(tifFinder("af_ERZD__M_1km.tif"))[[1]]
+
 
 ```
 
 
-## Building layers
+# Stacking data
 
 ```{r}
+soilStack <- stack(pHLayer, carbonLayer, textureLayer, sandLayer, clayLayer, cecLayer, zoneTextureLayer, phosLayer, zoneCoarseLayer, zoneLayer)
+```
 
 
+## Cropping data
 
-cropRaster <- function(rasterObj, borders){
-  cropped = crop(rasterObj, borders)
-}
+`Crop` extent of the raster and then `mask` raster to fit the outlines of Kenya.
 
+```{r}
+soilDat <- crop(soilStack, extent(keBoundaries))
 
-
-test <- crop(testList[[1]], keBoundaries)
-plot(test)
-
-maskTest <- extract(testList[[1]], keBoundaries)
-plot(maskTest)
-
-testList[[1]][keBoundaries,]
-
-# rasterList <- importRasterAsList(testInput)
-# 
-# weightList <- c(1/6, 1/3, 1/2)
-
-
-
-
-
+soilDat <- mask(soilDat, keBoundaries)
 
 # raster calculations can be done directly
 
@@ -256,8 +318,6 @@ cropRasterToKenya <- function(rasterList){
 }
 
 ```
-
-# Stacking data
 
 # Clustering Code
 
