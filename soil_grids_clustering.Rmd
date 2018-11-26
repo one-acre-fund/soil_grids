@@ -174,16 +174,6 @@ addWeights <- function(rasterList, weightList){
 }
 ```
 
-```{r, scrap}
-rasterList <- importRasterAsList(tifFinder("af_PHIHOX_T__M"))
-
-test <- Map("*", rasterList, weightList)
-
-secondTest <- stack(test)
-
-thirdTest <- mean(secondTest)
-```
-
 
 ```{r eval=FALSE, include=FALSE}
 #ph
