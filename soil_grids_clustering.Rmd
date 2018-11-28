@@ -106,9 +106,11 @@ weightList <- list(firstWeight, secondWeight, thirdWeight)
 
 
 ```{r}
-dataDir <- normalizePath(file.path("..", "soil_grids_data"))
+rawDir <- normalizePath(file.path("..", "soil_grids_raw_data"))
 
-tifFiles <- paste0(dataDir, "/", list.files(dataDir, pattern = ".tif$"))
+datDir <- normalizePath(file.path("..", "soil_grids_data"))
+
+tifFiles <- paste0(rawDir, "/", list.files(dataDir, pattern = ".tif$"))
 
 ```
 
@@ -119,10 +121,10 @@ The overall soil rasters are too big to do the calculations first (even if I'm d
 ## Kenya boundaries
 
 ```{r}
-if(!file.exists(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))){
+if(!file.exists(paste0(outputDir, "/GADM_2.8_KEN_adm2.rds"))){
   keBoundaries <- getData("GADM", country='KE', level=2, path = dataDir) 
 } else {
-  keBoundaries <- readRDS(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))
+  keBoundaries <- readRDS(paste0(outputDir, "/GADM_2.8_KEN_adm2.rds"))
 }
 
 ## transform the shape file to the correct CRS system
@@ -146,7 +148,7 @@ plot(keBoundaries)
 
 ## Applying weights
 
-It's not going to be very elegant but I'm going to manually apply the weights to the soil layers because I can't figure out a more efficient way to do this. Ultimately I probably want that in a separate data preparation script but for the time being I'll just have it save a final file that I won't refresh unless I need to. 
+It's not going to be very elegant but I'm going to manually apply the weights to the soil layers because I can't figure out a more efficient way to do this. Ultimately I probably want that in a separate data preparation script but for the time being I'll just have it save a final file that I won't refresh unless I need to. Here's a [helpful reference](https://gis.stackexchange.com/questions/61243/clipping-a-raster-in-r).
 
 ```{r}
 tifFinder <- function(input){
@@ -176,25 +178,26 @@ addWeights <- function(rasterList, weightList){
 
 ```
 
-
-```{r eval=FALSE, include=FALSE}
-#ph
-# pHLayer <- mean(importRasterAsList(tifFinder("af_PHIHOX_T__M_sd1"))[[1]] * firstWeight, importRasterAsList(tifFinder("af_PHIHOX_T__M_sd2"))[[1]] * secondWeight, importRasterAsList(tifFinder("af_PHIHOX_T__M_sd3"))[[1]] * thirdWeight)
-
+```{r}
 forceUpdate <- FALSE
 
-# ph but with functions
-if(!file.exists(paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/") | forceUpdate)){
-  pHLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_PHIHOX_T__M")))))
+if(forceUpdate){
   
-  writeRaster(pHLayer, file = paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+  # I can't hold all the raw data in memory so I'll run these one at a time and then only keep the analyzed results on the hd.
+
+# ph but with functions
+if(!file.exists(paste(datDir, "output", "pH_weighted_layer.tif", sep = "/")) | forceUpdate){
+  print("tried")
+  pHLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_PHIHOX_T__M")), weightList)))
+  
+  writeRaster(pHLayer, file = paste(outputDir, "output", "pH_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
-  pHLayer <- raster(paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/"))
+  pHLayer <- raster(paste(datDir, "output", "pH_weighted_layer.tif", sep = "/"))
 }
 
 # carbon
-if(!file.exists(paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/") | forceUpdate)){
-  carbonLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_ORCDRC_T__M")))))
+if(!file.exists(paste(datDir, "output", "carbon_weighted_layer.tif", sep = "/")) | forceUpdate){
+  carbonLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_ORCDRC_T__M")), weightList)))
   
   writeRaster(carbonLayer, file = paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -202,8 +205,8 @@ if(!file.exists(paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/")
 }
 
 # texture
-if(!file.exists(paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/") | forceUpdate)){
-  textureLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_TEXMHT_T__M")))))
+if(!file.exists(paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/")) | forceUpdate){
+  textureLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_TEXMHT_T__M")), weightList)))
   
   writeRaster(textureLayer, file = paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -211,16 +214,16 @@ if(!file.exists(paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/"
 }
 
 # sand content
-if(!file.exists(paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/") | forceUpdate)){
-  sandLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_SNDPPT_T__M")))))
+if(!file.exists(paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/")) | forceUpdate){
+  sandLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_SNDPPT_T__M")), weightList)))
   
   writeRaster(sandLayer, file = paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
   
 }
 # silt content
-if(!file.exists(paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/") | forceUpdate)){
-  siltLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_SLTPPT_T__M")))))
+if(!file.exists(paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/")) | forceUpdate){
+  siltLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_SLTPPT_T__M")), weightList)))
   
   writeRaster(siltLayer, file = paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -228,8 +231,8 @@ if(!file.exists(paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/") |
 }
 
 # clay content
-if(!file.exists(paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/") | forceUpdate)){
-  clayLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_CLYPPT_T__M")))))
+if(!file.exists(paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/")) | forceUpdate){
+  clayLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_CLYPPT_T__M")), weightList)))
   
   writeRaster(clayLayer, file = paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -237,12 +240,13 @@ if(!file.exists(paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/") |
 }
 
 # CEC
-if(!file.exists(paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/") | forceUpdate)){
-  cecLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_CEC_T__M")))))
+if(!file.exists(paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/")) | forceUpdate){
+  cecLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_CEC_T__M")), weightList)))
   
   writeRaster(cecLayer, file = paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
   cecLayer <- raster(paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/"))
+  }
 }
 ```
 
@@ -271,10 +275,7 @@ phosLayer <- importRasterAsList(tifFinder("af250m_nutrient_p_t_m_agg30cm.tif"))[
 zoneCoarseLayer <- importRasterAsList(tifFinder("af_agg_30cm_CRFVOL__M_1km.tif"))[[1]]
 
 zoneLayer <- importRasterAsList(tifFinder("af_ERZD__M_1km.tif"))[[1]]
-
-
 ```
-
 
 # Stacking data
 
