@@ -380,6 +380,10 @@ plot(numClusters, lapply(soilClusters, FUN=function(x) { sum(x$withinss) }),
      main="Clustering soil at 250m grid level")
 ```
 
+**Interpretation**: There isn't a clear kink in the graph. Running more than 10 clusters likely exceeds what we can manage in the field anyway. It seems to be the case that we max out the marginal benefit around 6 clusters but the absence of a clear elbow in the graph indicates that we still minimize within cluster variance as we continue to add clusters greater than 6 and less than 10. 
+
+> Six, however, seems like a reasonable inflection point for the purposes of structuring the trials.
+
 # Map
 
 My hope is that I can just simply use ggplot to make a simple graph of the clusters to avoid having to actually plot them on a map. Let's see how this goes.
@@ -396,12 +400,57 @@ mapKClusts <- function(kClusts, dat) {
         labs(title = paste0("k=", max(kGps$cluster)))
     }), plot)
     return(tmp)
-  }
+}
+
+scenarioDat <- do.call(rbind, lapply(soilClusters, function(clusterDat){
+  clusterDat$totalCluster  = max(clusterDat$cluster)
+  df <- cbind(cluster = clusterDat$cluster, totalCluster = clusterDat$totalCluster, soilDf)
+  return(df)
+  
+}))
+
+mapClusters <- function(dat, nClusters){
+  gph <- dat %>%
+    filter(totalCluster == nClusters) %>%
+    ggplot(., aes(x = x, y = y, color = as.factor(cluster))) +
+    geom_point()
+}
 ```
+
+I'm mapping the data in `ggplot` as points but I really should be converting it back to raster to make a nicer map. It appears that there are ways to [implement k-means with raster data](https://www.r-exercises.com/2018/02/28/advanced-techniques-with-raster-data-part-1-unsupervised-classification/) but this is not familiar to me and thus hesitate to try to implement them now at the last minute.
 
 ```{r}
-mapKClusts(soilClusters, soilDf)
+#mapKClusts(soilClusters, soilDf) # this was leading to strange results so I'm printing the variables in a more manual way...
+
+for(i in 2:10){
+  print(mapClusters(scenarioDat, i) + labs(title = paste0("clusters = ", i)))
+}
+
 ```
 
+# Summary
 
-# Appendix
+Summarize the clusters in each scenario
+
+```{r}
+scenarioDat %>%
+  group_by(totalCluster, cluster) %>%
+  summarise_at(vars(matches("layer")),
+               funs(mean))
+```
+
+**Interpretation and point of follow up**: The soil values coming from the soil grids data are not immediately interpretable and understanable to me. For instance, the pH values are not on the 1-14 scale we would expect. This is true of the original data as well. 
+
+> Step, can you reality check that these data are within the range we expect for the pH unit being used here?
+
+# Trial placement
+
+> It's also not clear to me what 1AF specific unit I should be using to determine where trial officers should go. 
+
+Should I bring in site GPS to determine the soil profiles of each site? That seems like the most actionable version of this but that would take away the benefit of the broader coverage of raster data. The next steps as I can best project them are:
+
+* associate sites with each of the soil profiles created in the soil clustering (the 6 cluster scenario if we agree that's the appropriate one)
+* see which sites are firmly in each zone
+
+From there I'm a bit fuzzy on what it would mean to assign trial officers. I assume that means that we'd determine the specific sites where trial officers would be working.
+
