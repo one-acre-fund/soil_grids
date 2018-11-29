@@ -122,7 +122,38 @@ I want to import all of these rasters but it's important that they be clearly gr
 
 The overall soil rasters are too big to do the calculations first (even if I'm doing them as efficiently as possible which I may not be). Therefore I first need to trim the larger raster down to just Kenya before calculating the weights and averages.
 
+## Site points
+
+I'll use the 2019 site GPS to identify and then extract the site value of each cluster to facilitate assignment of trial officers. This means that after clustering I need to convert the cluster data back into raster so that I can extract the values for the GPS points. Additionally, I need to convert the provided site [GPS points to the correct projection](http://rspatial.org/spatial/rst/6-crs.html) (from no projection? Figure out how to do this.)
+
+It's a bit of a hack but I'm assuming a certain CRS because I don't know in what system our lat lon data are collected. 
+
+```{r}
+siteGpsFiles <- list.files(paste(dataDir, "2019", sep = "/"), pattern = ".xls")
+
+siteGpsFiles <- siteGpsFiles[!siteGpsFiles %in% c("District Offices.xlsx", "Regional Office.xlsx", "Warehouses.xlsx")]
+siteGpsFiles <- paste(dataDir, "2019", siteGpsFiles, sep = "/")
+
+readGpsFiles <- lapply(siteGpsFiles, function(x){
+  read_xlsx(x)
+})
+
+combineGpsFiles <- as.data.frame(do.call(rbind, readGpsFiles))
+
+# investigate the projection of these data points
+siteSp <- SpatialPointsDataFrame(coords = combineGpsFiles[,c("Longitude", "Latitude")], data = combineGpsFiles, proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+
+siteReproject <- spTransform(siteSp, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+```
+
+```{r}
+intersect(siteReproject, test)
+```
+
+
 ## Kenya boundaries
+
+Determine the Kenya boundaries we need by using `intersect`.
 
 ```{r}
 if(!file.exists(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))){
@@ -132,6 +163,10 @@ if(!file.exists(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))){
 }
 
 # I additionally want to subset this down to just western Kenya because it's too computationally intentsive to run these calculations for other areas. I'm going to subset the shape file to just western Kenya and the plot it to confirm I've done it correctly.
+keBoundaries <- spTransform(keBoundaries, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+
+westernMap <- intersect(keBoundaries, siteReproject)
 
 # from Name 1
 westernAreas <- c("Bungoma", "Busia", "Homa Bay", "Kakamega", "Kericho", "Kisii", "Kisumu", "Migori", "Nyamira", "Siaya", "Vihiga", "Kiambu", "Bomet", "Meru", "Nakuru", "Nandi", "Tharaka-Nithi", "Narok", "Nyeri", "Embu", "Kirinyaga", "Uasin Gishu")
@@ -458,28 +493,6 @@ for(i in 1:length(clusterRasters)){
 **Question:** Are we okay with the AEZ being non-contiguous? 
 
 # Site extraction
-
-I'll use the 2019 site GPS to identify and then extract the site value of each cluster to facilitate assignment of trial officers. This means that after clustering I need to convert the cluster data back into raster so that I can extract the values for the GPS points. Additionally, I need to convert the provided site [GPS points to the correct projection](http://rspatial.org/spatial/rst/6-crs.html) (from no projection? Figure out how to do this.)
-
-It's a bit of a hack but I'm assuming a certain CRS because I don't know in what system our lat lon data are collected. 
-
-```{r}
-siteGpsFiles <- list.files(paste(dataDir, "2019", sep = "/"), pattern = ".xls")
-
-siteGpsFiles <- siteGpsFiles[!siteGpsFiles %in% c("District Offices.xlsx", "Regional Office.xlsx", "Warehouses.xlsx")]
-siteGpsFiles <- paste(dataDir, "2019", siteGpsFiles, sep = "/")
-
-readGpsFiles <- lapply(siteGpsFiles, function(x){
-  read_xlsx(x)
-})
-
-combineGpsFiles <- as.data.frame(do.call(rbind, readGpsFiles))
-
-# investigate the projection of these data points
-siteSp <- SpatialPointsDataFrame(coords = combineGpsFiles[,c("Longitude", "Latitude")], data = combineGpsFiles, proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
-
-siteReproject <- spTransform(siteSp, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
-```
 
 ```{r}
 fullStack <- stack(soilStack, stack(clusterRasters))
