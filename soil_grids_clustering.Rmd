@@ -129,10 +129,6 @@ if(!file.exists(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))){
   keBoundaries <- readRDS(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))
 }
 
-## transform the shape file to the correct CRS system
-keBoundaries <- spTransform(keBoundaries, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
-
-
 # I additionally want to subset this down to just western Kenya because it's too computationally intentsive to run these calculations for other areas. I'm going to subset the shape file to just western Kenya and the plot it to confirm I've done it correctly.
 
 # from Name 1
@@ -141,12 +137,17 @@ westernAreas <- c("Bungoma", "Busia", "Homa Bay", "Kakamega", "Kericho", "Kisii"
 westernMap <- keBoundaries[tolower(keBoundaries$NAME_1) %in% tolower(westernAreas),]
 
 plot(westernMap)
+
+westernMapOriginal <- westernMap # keep an untransformed version of the truncated shape file to work with N and P
+
+## transform the shape file to the correct CRS system
+westernMap <- spTransform(westernMap, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
 ```
 
 ```{r eval=FALSE, include=FALSE}
 plot(keBoundaries)
 ```
-
 
 ## Applying weights
 
@@ -196,12 +197,12 @@ addWeights <- function(rasterList, weightList){
 #   mask(x, westernMap)
 # })
 
-getKenyaValues <- function(rasterList){
+getKenyaValues <- function(rasterList, map){
   # this function trims the africa sized raster down to just the extent in western Kenya we care about
   # output: a list of rasters to go into the weight calculations
   # this cna also be used on a single raster but it'll then return 
-  rlCropped <- lapply(rasterList, function(x){crop(x, extent(westernMap))})
-  rlMask <- lapply(rlCropped, function(x){mask(x, westernMap)})
+  rlCropped <- lapply(rasterList, function(x){crop(x, extent(map))})
+  rlMask <- lapply(rlCropped, function(x){mask(x, map)})
   
   return(rlMask)
 }
@@ -211,7 +212,7 @@ getKenyaValues <- function(rasterList){
 
 
 ```{r}
-forceUpdate <- TRUE
+forceUpdate <- FALSE
   
   # I can't hold all the raw data in memory so I'll run these one at a time and then only keep the analyzed results on the hd.
 
@@ -219,7 +220,7 @@ forceUpdate <- TRUE
 if(!file.exists(paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/")) | forceUpdate){
   print("tried")
   
-  pHLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_PHIHOX_T__M"))), weightList)))
+  pHLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_PHIHOX_T__M")), westernMap), weightList)))
   
   writeRaster(pHLayer, file = paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -228,7 +229,7 @@ if(!file.exists(paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/")) | 
 
 # carbon
 if(!file.exists(paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/")) | forceUpdate){
-  carbonLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_ORCDRC_T__M"))), weightList)))
+  carbonLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_ORCDRC_T__M")), westernMap), weightList)))
   
   writeRaster(carbonLayer, file = paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -237,7 +238,7 @@ if(!file.exists(paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/")
 
 # texture
 if(!file.exists(paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/")) | forceUpdate){
-  textureLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_TEXMHT_T__M"))), weightList)))
+  textureLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_TEXMHT_T__M")), westernMap), weightList)))
   
   writeRaster(textureLayer, file = paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -246,7 +247,7 @@ if(!file.exists(paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/"
 
 # sand content
 if(!file.exists(paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/")) | forceUpdate){
-  sandLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_SNDPPT_T__M"))), weightList)))
+  sandLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_SNDPPT_T__M")), westernMap), weightList)))
   
   writeRaster(sandLayer, file = paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -254,7 +255,7 @@ if(!file.exists(paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/")) 
 }
 # silt content
 if(!file.exists(paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/")) | forceUpdate){
-  siltLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_SLTPPT_T__M"))), weightList)))
+  siltLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_SLTPPT_T__M")), westernMap), weightList)))
   
   writeRaster(siltLayer, file = paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -263,7 +264,7 @@ if(!file.exists(paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/")) 
 
 # clay content
 if(!file.exists(paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/")) | forceUpdate){
-  clayLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_CLYPPT_T__M"))), weightList)))
+  clayLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_CLYPPT_T__M")), westernMap), weightList)))
   
   writeRaster(clayLayer, file = paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -272,7 +273,7 @@ if(!file.exists(paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/")) 
 
 # CEC
 if(!file.exists(paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/")) | forceUpdate){
-  cecLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_CEC_T__M"))), weightList)))
+  cecLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_CEC_T__M")), westernMap), weightList)))
   
   writeRaster(cecLayer, file = paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -300,28 +301,47 @@ This summary repeats content from above:
     
 I'm importing these directly because it's not computationally intensive to do so.
 
+## N and P
+
+The nitrogen and phosphorous layers are coming in with different projections. I'm going to import them here and see if I can truncate them as need be using the original, untransformed shape file.
+
 ```{r eval=FALSE, include=FALSE}
-if(!file.exist(paste(dataDir, "output", "phosphorous_layer_projected.tif", sep = "/")) | forceUpdate){
-  phosLayer <- importRasterAsList(tifFinder("af250m_nutrient_p_t_m_agg30cm.tif"))[[1]]
-  phosLayer <- projectRaster(phosLayer, crs = "+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0")
+if(!file.exists(paste(dataDir, "output", "phosphorous_layer_projected.tif", sep = "/")) | forceUpdate){
+  
+  phosLayer <- getKenyaValues(importRasterAsList(tifFinder("af250m_nutrient_p_t_m_agg30cm.tif")), westernMapOriginal)[[1]] 
+  phosLayer <- projectRaster(phosLayer, pHLayer)
+  
   writeRaster(phosLayer, file = paste(dataDir, "output", "phosphorous_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
   phosLayer <- raster(paste(dataDir, "output", "phosphorous_layer_projected.tif", sep = "/"))
 }
 
-nitrogenLayer <- getKenyaValues(importRasterAsList(tifFinder("af250m_nutrient_n_m_agg30cm.tif")))[[1]] ## this is also in a different projection system.
+
+if(!file.exists(paste(dataDir, "output", "nitrogen_layer_projected.tif", sep = "/")) | forceUpdate){
+  
+  nitrogenLayer <- getKenyaValues(importRasterAsList(tifFinder("af250m_nutrient_n_m_agg30cm.tif")), westernMapOriginal)[[1]] 
+  # and then reproject it to the right system
+nitrogenLayer <- projectRaster(nitrogenLayer, pHLayer)
+  
+  writeRaster(nitrogenLayer, file = paste(dataDir, "output", "nitrogen_layer_projected.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+} else {
+  nitrogenLayer <- raster(paste(dataDir, "output", "nitrogen_layer_projected.tif", sep = "/"))
+}
+
+
+
 ```
 
 Time is short so I want to just set the extent of these additional layers to that of the weighted layers. I may be doing something wrong but I don't think I am.
 
 ```{r}
-zoneTextureLayer <- getKenyaValues(importRasterAsList(tifFinder("af_agg_30cm_TEXCLSS__M_1km.tif")))[[1]]
+zoneTextureLayer <- getKenyaValues(importRasterAsList(tifFinder("af_agg_30cm_TEXCLSS__M_1km.tif")), westernMap)[[1]]
 zoneTextureLayer <- projectRaster(zoneTextureLayer, pHLayer)
 
-zoneCoarseLayer <- getKenyaValues(importRasterAsList(tifFinder("af_agg_30cm_CRFVOL__M_1km.tif")))[[1]]
+zoneCoarseLayer <- getKenyaValues(importRasterAsList(tifFinder("af_agg_30cm_CRFVOL__M_1km.tif")), westernMap)[[1]]
 zoneCoarseLayer <- projectRaster(zoneCoarseLayer, pHLayer)
 
-zoneLayer <- getKenyaValues(importRasterAsList(tifFinder("af_ERZD__M_1km.tif")))[[1]]
+zoneLayer <- getKenyaValues(importRasterAsList(tifFinder("af_ERZD__M_1km.tif")), westernMap)[[1]]
 zoneLayer <- projectRaster(zoneLayer, pHLayer)
 ```
 
@@ -331,8 +351,9 @@ And then check that the extent of the phosphorous layer is the same as the ohter
 
 An option for a future update is to utilize a package like clusteR to run the re-projection arcoss multiple clusters. But not today!
 
-```{r}
-soilStack <- stack(pHLayer, carbonLayer, sandLayer, clayLayer, cecLayer, zoneTextureLayer, zoneCoarseLayer, zoneLayer)
+```{r, fig.height=6, fig.width=6}
+soilStack <- stack(pHLayer, carbonLayer, sandLayer, clayLayer, siltLayer, cecLayer, nitrogenLayer, phosLayer, zoneTextureLayer, zoneCoarseLayer, zoneLayer)
+names(soilStack) <- c("pH", "carbon", "sand", "clay", "silt", "cec", "nitrogen", "phosphorous", "zoneTexture", "zoneCoarse", "zone")
 plot(soilStack)
 ```
 
@@ -357,6 +378,8 @@ And then per Step's requests:
 This converts the grids into points but in some way I don't really care what each point is called. But I need a way to connet each point back to something interpretable.
 
 Follow this example for [converting to df, executing clustering, and saving the results back as a raster](https://gis.stackexchange.com/questions/123639/unsupervised-classification-with-kmeans-in-r). I'll need the data back in raster form to extract the values for the sites. I'll want to assign the cluster values as new layers in the raster stack, I assume and then be able to extract those for the given GPS.
+
+Actually what I want to do is convert the cluster assignment list to rasters and then add them as layers to the `soilStack`! Hopefully that works.
 
 ```{r}
 soilDf <- raster::as.data.frame(soilStack, xy = TRUE, na.rm = TRUE)
@@ -384,18 +407,16 @@ runKMeans <- function(dat, datCols, completeVar, numClusters=2:8) {
 ```
 
 ```{r}
-soilCols <- names(soilDf)[grep("layer", names(soilDf))]
+soilCols <- names(soilDf)[!names(soilDf) %in% c("x", "y")]
 
-soilClusters <- runKMeans(soilDf, c(soilCols), completeVar = "pH_weighted_layer", numClusters)
+soilClusters <- runKMeans(soilDf, c(soilCols), completeVar = "pH", numClusters)
 
 plot(numClusters, lapply(soilClusters, FUN=function(x) { sum(x$withinss) }),   
      type="b", ylab="average within cluster sum of square error",
      main="Clustering soil at 250m grid level")
 ```
 
-**Interpretation**: There isn't a clear kink in the graph. Running more than 10 clusters likely exceeds what we can manage in the field anyway. It seems to be the case that we max out the marginal benefit around 6 clusters but the absence of a clear elbow in the graph indicates that we still minimize within cluster variance as we continue to add clusters greater than 6 and less than 10. 
-
-> Six, however, seems like a reasonable inflection point for the purposes of structuring the trials.
+> **Interpretation**: The most evident kink in the graph is at 3 clusters. This changed from the previous version where we were not able to include N and P.
 
 # Map
 
@@ -435,7 +456,7 @@ I'm mapping the data in `ggplot` as points but I really should be converting it 
 ```{r}
 #mapKClusts(soilClusters, soilDf) # this was leading to strange results so I'm printing the variables in a more manual way...
 
-for(i in 2:10){
+for(i in numClusters){
   print(mapClusters(scenarioDat, i) + labs(title = paste0("clusters = ", i)))
 }
 
