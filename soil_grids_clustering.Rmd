@@ -59,6 +59,8 @@ select <- dplyr::select
 
 We're trying to make soil classes for 1AF Kenya to inform the placement of on-farm nutrient omission trials. This analysis accesses data from the [AfSIS soil grids project](http://data.isric.org/geonetwork/srv/eng/catalog.search#/home), combines them into a feature set and identifies clusters across sampling units to inform trial placement. 
 
+This analysis accesses data from the [Africa SoilGrids](http://data.isric.org/geonetwork/srv/eng/catalog.search#/home) produced and hosted by ISRIC for the AfSIS project.
+
 # Data
 
 Most of the data have been zipped. I'm just goint to manually unzip it to simplify the process. Here's the complete list of the data I've tried to access from the online repository:
@@ -178,6 +180,36 @@ addWeights <- function(rasterList, weightList){
 
 ```
 
+## Cropping data
+
+`Crop` extent of the raster and then `mask` raster to fit the outlines of Kenya. Hopefully this doesn't take too long? Not too long! This step is necessary or else the raster is too big for the later steps. 
+
+```{r}
+# test
+# rf <- importRasterAsList(tifFinder("af_PHIHOX_T__M"))
+# 
+# rfcropped <- lapply(rf, function(x){
+#   crop(x, extent(westernMap))
+# })
+# 
+# rfmask <- lapply(rfcropped, function(x){
+#   mask(x, westernMap)
+# })
+
+getKenyaValues <- function(rasterList){
+  # this function trims the africa sized raster down to just the extent in western Kenya we care about
+  # output: a list of rasters to go into the weight calculations
+  # this cna also be used on a single raster but it'll then return 
+  rlCropped <- lapply(rasterList, function(x){crop(x, extent(westernMap))})
+  rlMask <- lapply(rlCropped, function(x){mask(x, westernMap)})
+  
+  return(rlMask)
+}
+
+#soilExtract <- extract(soilMask, westernMap, df = TRUE) # gets soil values for each of the 87 shapes in the westernMap
+```
+
+
 ```{r}
 forceUpdate <- TRUE
   
@@ -186,7 +218,8 @@ forceUpdate <- TRUE
 # ph but with functions
 if(!file.exists(paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/")) | forceUpdate){
   print("tried")
-  pHLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_PHIHOX_T__M")), weightList)))
+  
+  pHLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_PHIHOX_T__M"))), weightList)))
   
   writeRaster(pHLayer, file = paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -195,7 +228,7 @@ if(!file.exists(paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/")) | 
 
 # carbon
 if(!file.exists(paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/")) | forceUpdate){
-  carbonLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_ORCDRC_T__M")), weightList)))
+  carbonLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_ORCDRC_T__M"))), weightList)))
   
   writeRaster(carbonLayer, file = paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -204,7 +237,7 @@ if(!file.exists(paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/")
 
 # texture
 if(!file.exists(paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/")) | forceUpdate){
-  textureLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_TEXMHT_T__M")), weightList)))
+  textureLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_TEXMHT_T__M"))), weightList)))
   
   writeRaster(textureLayer, file = paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -213,7 +246,7 @@ if(!file.exists(paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/"
 
 # sand content
 if(!file.exists(paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/")) | forceUpdate){
-  sandLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_SNDPPT_T__M")), weightList)))
+  sandLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_SNDPPT_T__M"))), weightList)))
   
   writeRaster(sandLayer, file = paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -221,7 +254,7 @@ if(!file.exists(paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/")) 
 }
 # silt content
 if(!file.exists(paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/")) | forceUpdate){
-  siltLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_SLTPPT_T__M")), weightList)))
+  siltLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_SLTPPT_T__M"))), weightList)))
   
   writeRaster(siltLayer, file = paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -230,7 +263,7 @@ if(!file.exists(paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/")) 
 
 # clay content
 if(!file.exists(paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/")) | forceUpdate){
-  clayLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_CLYPPT_T__M")), weightList)))
+  clayLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_CLYPPT_T__M"))), weightList)))
   
   writeRaster(clayLayer, file = paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -239,7 +272,7 @@ if(!file.exists(paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/")) 
 
 # CEC
 if(!file.exists(paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/")) | forceUpdate){
-  cecLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_CEC_T__M")), weightList)))
+  cecLayer <- sum(stack(addWeights(getKenyaValues(importRasterAsList(tifFinder("af_CEC_T__M"))), weightList)))
   
   writeRaster(cecLayer, file = paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -275,58 +308,32 @@ if(!file.exist(paste(dataDir, "output", "phosphorous_layer_projected.tif", sep =
 } else {
   phosLayer <- raster(paste(dataDir, "output", "phosphorous_layer_projected.tif", sep = "/"))
 }
+
+nitrogenLayer <- getKenyaValues(importRasterAsList(tifFinder("af250m_nutrient_n_m_agg30cm.tif")))[[1]] ## this is also in a different projection system.
 ```
 
+Time is short so I want to just set the extent of these additional layers to that of the weighted layers. I may be doing something wrong but I don't think I am.
 
 ```{r}
-zoneTextureLayer <- importRasterAsList(tifFinder("af_agg_30cm_TEXCLSS__M_1km.tif"))[[1]]
+zoneTextureLayer <- getKenyaValues(importRasterAsList(tifFinder("af_agg_30cm_TEXCLSS__M_1km.tif")))[[1]]
+zoneTextureLayer <- projectRaster(zoneTextureLayer, pHLayer)
 
-zoneCoarseLayer <- importRasterAsList(tifFinder("af_agg_30cm_CRFVOL__M_1km.tif"))[[1]]
+zoneCoarseLayer <- getKenyaValues(importRasterAsList(tifFinder("af_agg_30cm_CRFVOL__M_1km.tif")))[[1]]
+zoneCoarseLayer <- projectRaster(zoneCoarseLayer, pHLayer)
 
-zoneLayer <- importRasterAsList(tifFinder("af_ERZD__M_1km.tif"))[[1]]
-
-nitrogenLayer <- importRasterAsList(tifFinder("af250m_nutrient_n_m_agg30cm.tif"))[[1]]
+zoneLayer <- getKenyaValues(importRasterAsList(tifFinder("af_ERZD__M_1km.tif")))[[1]]
+zoneLayer <- projectRaster(zoneLayer, pHLayer)
 ```
 
 ## Stacking data
 
-Align the extent of the weighted rasters with the other rasters so I can combine them into a single stack before making the clusters.
-
-**Crop the other rasters to the extent of the weighted rasters.**
-
-```{r}
-weightedLayers <- c(pHLayer, carbonLayer, textureLayer, sandLayer, clayLayer, cecLayer)
-
-unweightedLayers <- c(zoneTextureLayer, zoneCoarseLayer, zoneLayer)
-
-# lapply(weightedLayers, function(x) extent(x))
-# 
-# lapply(unweightedLayers, function(x) extent(x))
-
-#phosLayer # this is in a different projection! convert!
-```
-
-And then check that the extent of the phosphorous layer is the same as the ohter layers so they can all fit in one stack together. **I'm currently excluding the phosphorous layer as it was taking forever to reproject in the right projection. Moving on!
+And then check that the extent of the phosphorous layer is the same as the ohter layers so they can all fit in one stack together. **I'm currently excluding the phosphorous layer as it was taking forever to reproject in the right projection**. Moving on!
 
 An option for a future update is to utilize a package like clusteR to run the re-projection arcoss multiple clusters. But not today!
 
 ```{r}
-soilStack <- stack(weightedLayers, unweightedLayer)
-```
-
-
-## Cropping data
-
-`Crop` extent of the raster and then `mask` raster to fit the outlines of Kenya. Hopefully this doesn't take too long? Not too long! This step is necessary or else the raster is too big for the later steps. 
-
-```{r}
-soilCrop <- crop(soilStack, extent(westernMap))
-
-soilMask <- mask(soilCrop, westernMap)
-
-soilExtract <- extract(soilMask, westernMap, df = TRUE) # gets soil values for each of the 87 shapes in the westernMap
-
-plot(soilMask)
+soilStack <- stack(pHLayer, carbonLayer, sandLayer, clayLayer, cecLayer, zoneTextureLayer, zoneCoarseLayer, zoneLayer)
+plot(soilStack)
 ```
 
 # Clustering Code
@@ -349,8 +356,10 @@ And then per Step's requests:
 
 This converts the grids into points but in some way I don't really care what each point is called. But I need a way to connet each point back to something interpretable.
 
+Follow this example for [converting to df, executing clustering, and saving the results back as a raster](https://gis.stackexchange.com/questions/123639/unsupervised-classification-with-kmeans-in-r). I'll need the data back in raster form to extract the values for the sites. I'll want to assign the cluster values as new layers in the raster stack, I assume and then be able to extract those for the given GPS.
+
 ```{r}
-soilDf <- raster::as.data.frame(soilMask, xy = TRUE, na.rm = TRUE)
+soilDf <- raster::as.data.frame(soilStack, xy = TRUE, na.rm = TRUE)
 ```
 
 # Clustering analysis
@@ -438,13 +447,26 @@ for(i in 2:10){
 
 # Site extraction
 
-I'll use the 2019 site GPS to identify and then extract the site value of each cluster to facilitate assignment of trial officers. This means that after clustering I need to convert the cluster data back into raster so that I can extract the values for the GPS points. Additionally, I need to convert the provided site GPS points to the correct projection (from no projection? Figure out how to do this.)
+I'll use the 2019 site GPS to identify and then extract the site value of each cluster to facilitate assignment of trial officers. This means that after clustering I need to convert the cluster data back into raster so that I can extract the values for the GPS points. Additionally, I need to convert the provided site [GPS points to the correct projection](http://rspatial.org/spatial/rst/6-crs.html) (from no projection? Figure out how to do this.)
+
+It's a bit of a hack but I'm assuming a certain CRS because I don't know in what system our lat lon data are collected. 
 
 ```{r}
 siteGpsFiles <- list.files(paste(dataDir, "2019", sep = "/"), pattern = ".xls")
 
 siteGpsFiles <- siteGpsFiles[!siteGpsFiles %in% c("District Offices.xlsx", "Regional Office.xlsx", "Warehouses.xlsx")]
+siteGpsFiles <- paste(dataDir, "2019", siteGpsFiles, sep = "/")
 
+readGpsFiles <- lapply(siteGpsFiles, function(x){
+  read_xlsx(x)
+})
+
+combineGpsFiles <- as.data.frame(do.call(rbind, readGpsFiles))
+
+# investigate the projection of these data points
+siteSp <- SpatialPointsDataFrame(coords = combineGpsFiles[,c("Longitude", "Latitude")], data = combineGpsFiles, proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+
+siteReproject <- spTransform(siteSp, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
 ```
 
 
