@@ -99,6 +99,8 @@ the weights refer to the depth intervals :
 * 15-30 = 15/30 - this refers to `sd3` in the file names
 
 ```{r}
+forceUpdate <- TRUE
+
 firstWeight <- 5/30
 secondWeight <- 10/30
 thirdWeight <- 15/30
@@ -132,7 +134,7 @@ if(!file.exists(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))){
 # I additionally want to subset this down to just western Kenya because it's too computationally intentsive to run these calculations for other areas. I'm going to subset the shape file to just western Kenya and the plot it to confirm I've done it correctly.
 
 # from Name 1
-westernAreas <- c("Bungoma", "Busia", "Homa Bay", "Kakamega", "Kericho", "Kisii", "Kisumu", "Migori", "Nyamira", "Siaya", "Vihiga")
+westernAreas <- c("Bungoma", "Busia", "Homa Bay", "Kakamega", "Kericho", "Kisii", "Kisumu", "Migori", "Nyamira", "Siaya", "Vihiga", "Kiambu", "Bomet", "Meru", "Nakuru", "Nandi", "Tharaka-Nithi", "Narok", "Nyeri", "Embu", "Kirinyaga", "Uasin Gishu")
 
 westernMap <- keBoundaries[tolower(keBoundaries$NAME_1) %in% tolower(westernAreas),]
 
@@ -212,9 +214,7 @@ getKenyaValues <- function(rasterList, map){
 
 
 ```{r}
-forceUpdate <- FALSE
-  
-  # I can't hold all the raw data in memory so I'll run these one at a time and then only keep the analyzed results on the hd.
+# I can't hold all the raw data in memory so I'll run these one at a time and then only keep the analyzed results on the hd.
 
 # ph but with functions
 if(!file.exists(paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/")) | forceUpdate){
@@ -487,7 +487,7 @@ fullStack <- stack(soilStack, stack(clusterRasters))
 siteClusterValues <- lapply(clusterRasters, function(x){
   clusterVal <- extract(x,
           siteReproject,
-          buffer = 10,
+          buffer = 1, # adjust the buffer to ensure I capture all the points. I'm not sure what the unit is here.
           fun = max,
           df = TRUE)
   
@@ -511,7 +511,16 @@ scenarioDat <- do.call(rbind, lapply(siteClusterValues, function(clusterDat){
 
 # Summary
 
-Summarize the clusters in each scenario
+Summarize the clusters in each scenario. There are some sites that are not found in the raster data which means that I may need to change the shape file.
+
+```{r}
+scenarioDat %>%
+  filter(totalCluster == 2) %>%
+  ggplot(., aes(x = Longitude.1, y = Latitude.1, color = as.factor(cluster))) + 
+  geom_point()
+```
+
+It seems that most of the missing points are in regions that are not currently included. Try to include them. There are oddly though some points that 
 
 I need to be able to extract the soil values for the site points in order to actually summarize the cluster values. That code was taking too long to run so I'm just summarizing the distribution of the clusters.
 
@@ -532,24 +541,23 @@ ratioTab <- scenarioDat %>%
   group_by(totalCluster, cluster) %>%
   summarize(n = n()) %>%
   mutate(freq = n / sum(n),
-         freqFormat = paste0(round(freq,2) * 100, "%"))
+         freqFormat = paste0(round(freq,2) * 100, "%"),
+         officerCount = round(freq * 9,1))
 
 kable(ratioTab, format = 'markdown')
 ```
 
-Then the 3 and 6 AEZ scenario:
+Then the 3 AEZ scenario
 
 ```{r}
 ratioTab %>%
-  filter(totalCluster == 6 | totalCluster == 3) %>%
-  group_by(totalCluster, cluster) %>%
-  mutate(officerCount = round(freq * 9,1)) %>%
+  filter(dim(totalCluster == 3) %>%
   kable(., format = 'markdown')
 ```
 
 ## Trial placement
 
-> If we have 9 trial officers, ~11% coverage equals a single trial officer. This would mean that we have 3 in the 4th zone, ~2 in the first zone, 1 in the 5th zone, ~2 in the 6th zone, and 1 in the second and third zones. That equals 10 so we'd need to probably take one officer from one of the in between zones and assign them to one of the smaller zones.
+The table above shows the rough breakdown of trial officers across the AEZs. The breakdowns are obviously imprecise but can suggest where we should place trial officers.
 
 
 
