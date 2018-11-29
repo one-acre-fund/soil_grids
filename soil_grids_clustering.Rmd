@@ -305,7 +305,7 @@ I'm importing these directly because it's not computationally intensive to do so
 
 The nitrogen and phosphorous layers are coming in with different projections. I'm going to import them here and see if I can truncate them as need be using the original, untransformed shape file.
 
-```{r eval=FALSE, include=FALSE}
+```{r}
 if(!file.exists(paste(dataDir, "output", "phosphorous_layer_projected.tif", sep = "/")) | forceUpdate){
   
   phosLayer <- getKenyaValues(importRasterAsList(tifFinder("af250m_nutrient_p_t_m_agg30cm.tif")), westernMapOriginal)[[1]] 
@@ -381,11 +381,9 @@ Follow this example for [converting to df, executing clustering, and saving the 
 
 Actually what I want to do is convert the cluster assignment list to rasters and then add them as layers to the `soilStack`! Hopefully that works.
 
-```{r}
-soilDf <- raster::as.data.frame(soilStack, xy = TRUE)
-```
-
 # Clustering analysis
+
+I followed this methodology for outputing k means results as raster data to simplify the placement process: [implement k-means with raster data](https://www.r-exercises.com/2018/02/28/advanced-techniques-with-raster-data-part-1-unsupervised-classification/) 
 
 ```{r}
 numClusters <- 2:10
@@ -411,7 +409,7 @@ runKMeansRaster <- function(dat, numClusters=2:8) {
     # initiate new holding vector for output that's the same size as the original raster stack
     kmClustRes = vector(mode = 'integer', length = ncell(dat))
     kmClustRes[!idx] <- NA
-    kmClustRes[idx] <- clusterRes$cluster
+    kmClustRes[idx] <- as.factor(clusterRes$cluster)
     
     clusterRaster <- raster(dat[[1]])
     values(clusterRaster) <- kmClustRes
@@ -425,7 +423,12 @@ runKMeansRaster <- function(dat, numClusters=2:8) {
 ```{r}
 #soilCols <- names(soilStack)[!names(soilStack) %in% c("x", "y")]
 
-soilClusters <- runKMeansRaster(soilStack, numClusters)
+if(!file.exists(paste(dataDir, "soilClusters.rds", sep = "/")) | forceUpdate){
+  soilClusters <- runKMeansRaster(soilStack, numClusters)
+  saveRDS(soilClusters, paste(dataDir, "soilClusters.rds", sep = "/"))
+} else {
+  soilClusters <- readRDS(paste(dataDir, "soilClusters.rds", sep = "/"))
+}
 
 clusterRasters <- lapply(soilClusters, function(x){x[[1]]})
 
@@ -443,34 +446,9 @@ plot(numClusters, lapply(soilKmeans, FUN=function(x) { sum(x$withinss) }),
 My hope is that I can just simply use ggplot to make a simple graph of the clusters to avoid having to actually plot them on a map. Let's see how this goes.
 
 ```{r}
-mapKClusts <- function(kClusts, dat) {
-    gpsCols <- grep("x|y", names(dat))
-    tmp <- lapply(lapply(kClusts, FUN=function(kClust) {
-      kGps <- cbind(dat[,gpsCols], cluster=kClust$cluster)
-      ggplot(kGps, aes(x=x,
-             y=y,
-             color=as.factor(cluster))) + 
-        geom_point() + 
-        labs(title = paste0("k=", max(kGps$cluster)))
-    }), plot)
-    return(tmp)
-}
-
-mapClusters <- function(dat, nClusters){
-  gph <- dat %>%
-    filter(totalCluster == nClusters) %>%
-    ggplot(., aes(x = x, y = y, color = as.factor(cluster))) +
-    geom_point()
-}
-```
-
-I'm mapping the data in `ggplot` as points but I really should be converting it back to raster to make a nicer map. It appears that there are ways to [implement k-means with raster data](https://www.r-exercises.com/2018/02/28/advanced-techniques-with-raster-data-part-1-unsupervised-classification/) but this is not familiar to me and thus hesitate to try to implement them now at the last minute.
-
-```{r}
-#mapKClusts(soilClusters, soilDf) # this was leading to strange results so I'm printing the variables in a more manual way...
-
-for(i in numClusters){
-  print(mapClusters(scenarioDat, i) + labs(title = paste0("clusters = ", i)))
+for(i in 1:length(clusterRasters)){
+  #values(clusterRasters[[i]]) <- as.factor(values(clusterRasters[[i]]))
+  print(plot(clusterRasters[[i]]))
 }
 
 ```
@@ -478,7 +456,6 @@ for(i in numClusters){
 > As you can see we're not getting clean delineation between zones on the map. This shouldn't be entirely surprising but it potentially complicates the process of placing trial officers.
 
 **Question:** Are we okay with the AEZ being non-contiguous? 
-
 
 # Site extraction
 
@@ -504,6 +481,33 @@ siteSp <- SpatialPointsDataFrame(coords = combineGpsFiles[,c("Longitude", "Latit
 siteReproject <- spTransform(siteSp, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
 ```
 
+```{r}
+fullStack <- stack(soilStack, stack(clusterRasters))
+
+siteClusterValues <- lapply(clusterRasters, function(x){
+  extract(x,
+          siteReproject,
+          buffer = 10,
+          fun = max,
+          df = TRUE)
+})
+
+# this takes too long to run
+# siteClusterValues <- extract(fullStack,
+#           siteReproject,
+#           buffer = 10,
+#           fun = max,
+#           df = TRUE)
+
+scenarioDat <- do.call(rbind, lapply(siteClusterValues, function(clusterDat){
+  clusterDat$totalCluster  = max(clusterDat$layer, na.rm = T)
+  return(clusterDat)
+}))
+
+names(siteClusterValues) <- c("ID", "cluster", "totalCluster")
+
+```
+
 
 # Summary
 
@@ -511,6 +515,7 @@ Summarize the clusters in each scenario
 
 ```{r}
 scenarioDat %>%
+  filter(!is.na(cluster)) %>%
   group_by(totalCluster, cluster) %>%
   summarise_at(vars(matches("layer")),
                funs(mean))
@@ -548,12 +553,5 @@ ratioTab %>%
 
 > If we have 9 trial officers, ~11% coverage equals a single trial officer. This would mean that we have 3 in the 4th zone, ~2 in the first zone, 1 in the 5th zone, ~2 in the 6th zone, and 1 in the second and third zones. That equals 10 so we'd need to probably take one officer from one of the in between zones and assign them to one of the smaller zones.
 
-Or we could drop one of the smaller zones and consolidate.
 
-Should I bring in site GPS to determine the soil profiles of each site? That seems like the most actionable version of this but that would take away the benefit of the broader coverage of raster data. The next steps as I can best project them are:
-
-* associate sites with each of the soil profiles created in the soil clustering (the 6 cluster scenario if we agree that's the appropriate one)
-* see which sites are firmly in each zone
-
-From there I'm a bit fuzzy on what it would mean to assign trial officers. I assume that means that we'd determine the specific sites where trial officers would be working.
 
