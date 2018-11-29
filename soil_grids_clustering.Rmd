@@ -382,7 +382,7 @@ Follow this example for [converting to df, executing clustering, and saving the 
 Actually what I want to do is convert the cluster assignment list to rasters and then add them as layers to the `soilStack`! Hopefully that works.
 
 ```{r}
-soilDf <- raster::as.data.frame(soilStack, xy = TRUE, na.rm = TRUE)
+soilDf <- raster::as.data.frame(soilStack, xy = TRUE)
 ```
 
 # Clustering analysis
@@ -392,14 +392,25 @@ numClusters <- 2:10
 
 runKMeans <- function(dat, datCols, completeVar, numClusters=2:8) {
   # this function executes k-means clustering. I'm modifying it from the original code in the global_aez and country_aez R files to work with the raster data. This just works with the soil data in raster format. It might be better to functionize the input selection more but I'm just going to hardcode it for now.
-  # output - k means cluster assignments in list form
+  # the NA process will hopefully not complicate this too much considering that the NAs might go back in different places in each file.
+  # output - k means cluster assignments in list form with the NAs in place so that I can convert the data back to raster
   
   kClusts <- lapply(numClusters, FUN=function(k) {
     datA = dat[,c(datCols)]
+    
+    matNa <- as.data.frame(is.na(datA))
+    matNa$isComplete <- complete.cases(matNa)
+    
+    
     datA = datA[!is.na(datA[,completeVar]),]
+    
+    
     scaled <- scale(datA)
     set.seed(2017201616)
-    kmeans(scaled, centers=k, nstart=50, iter.max=100)
+    kmeanRes = kmeans(scaled, centers=k, nstart=50, iter.max=100)
+    
+    # and then return a similarly sized matrix / df
+    matNa[!is.na(matNa)] <- kmeanRes$cluster
   })
   return(kClusts)
 }
@@ -466,6 +477,21 @@ for(i in numClusters){
 
 **Question:** Are we okay with the AEZ being non-contiguous? 
 
+## Clusters to raster
+
+Convert the cluster data to raster and add it into the `soilStack`.
+
+```{r}
+clusterRaster <- lapply(soilClusters, function(x){
+  clusterVar = as.matrix(x$cluster)
+  colnames(clusterVar) = NULL
+  r = raster(soilStack)
+  r = setValues(r, clusterVar)
+  return(r)
+})
+```
+
+
 # Site extraction
 
 I'll use the 2019 site GPS to identify and then extract the site value of each cluster to facilitate assignment of trial officers. This means that after clustering I need to convert the cluster data back into raster so that I can extract the values for the GPS points. Additionally, I need to convert the provided site [GPS points to the correct projection](http://rspatial.org/spatial/rst/6-crs.html) (from no projection? Figure out how to do this.)
@@ -515,7 +541,7 @@ ratioTab <- scenarioDat %>%
   group_by(totalCluster, cluster) %>%
   summarize(n = n()) %>%
   mutate(freq = n / sum(n),
-         freq = paste0(round(freq,2) * 100, "%"))
+         freqFormat = paste0(round(freq,2) * 100, "%"))
 
 kable(ratioTab, format = 'markdown')
 ```
@@ -525,6 +551,8 @@ Then the 6 AEZ scenario:
 ```{r}
 ratioTab %>%
   filter(totalCluster == 6) %>%
+  group_by(totalCluster, cluster) %>%
+  mutate(officerCount = round(freq * 9,1)) %>%
   kable(., format = 'markdown')
 ```
 
