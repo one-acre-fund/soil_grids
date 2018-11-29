@@ -42,7 +42,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 # cowplot is for adding subtitles to plots
 # robustbase is to run robust regressions to compensate for outliers
 # car is for performing logit transformations
-libs <- c("tidyverse", "knitr", "readxl", "curl", "raster", "rgdal")
+libs <- c("tidyverse", "knitr", "readxl", "curl", "raster", "rgdal", "ggmap")
 lapply(libs, require, character.only = T, quietly = T, warn.conflicts = F)
 
 #### define helpful functions
@@ -134,9 +134,9 @@ keBoundaries <- spTransform(keBoundaries, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_
 # I additionally want to subset this down to just western Kenya because it's too computationally intentsive to run these calculations for other areas. I'm going to subset the shape file to just western Kenya and the plot it to confirm I've done it correctly.
 
 # from Name 1
-westernAreas <- c("Bungoma", "Busia", "Elgeyo-Marakwet", "Homa Bay", "Kakamega", "Kericho", "Kisii", "Kisumu", "Migori", "Nyamira", "Siaya", "Vihiga")
+westernAreas <- c("Bungoma", "Busia", "Homa Bay", "Kakamega", "Kericho", "Kisii", "Kisumu", "Migori", "Nyamira", "Siaya", "Vihiga")
 
-westernMap <- keBoundaries[tolower(westernAreas) %in% tolower(keBoundaries$NAME_1),]
+westernMap <- keBoundaries[tolower(keBoundaries$NAME_1) %in% tolower(westernAreas),]
 
 plot(westernMap)
 ```
@@ -316,9 +316,13 @@ soilStack <- stack(weightedLayers, unweightedLayer)
 `Crop` extent of the raster and then `mask` raster to fit the outlines of Kenya. Hopefully this doesn't take too long? Not too long! This step is necessary or else the raster is too big for the later steps. 
 
 ```{r}
-soilCrop <- crop(soilStack, extent(keBoundaries))
+soilCrop <- crop(soilStack, extent(westernMap))
 
-soilMask <- mask(soilCrop, keBoundaries)
+soilMask <- mask(soilCrop, westernMap)
+
+soilExtract <- extract(soilMask, westernMap, df = TRUE) # gets soil values for each of the 87 shapes in the westernMap
+
+plot(soilMask)
 ```
 
 # Clustering Code
@@ -348,9 +352,9 @@ soilDf <- raster::as.data.frame(soilMask, xy = TRUE, na.rm = TRUE)
 # Clustering analysis
 
 ```{r}
-numClusters <- 4:20
+numClusters <- 2:10
 
-runKMeans <- function(dat, datCols, gps=TRUE, completeVar, numClusters=2:8) {
+runKMeans <- function(dat, datCols, completeVar, numClusters=2:8) {
   # this function executes k-means clustering. I'm modifying it from the original code in the global_aez and country_aez R files to work with the raster data. This just works with the soil data in raster format. It might be better to functionize the input selection more but I'm just going to hardcode it for now.
   # output - k means cluster assignments in list form
   
@@ -369,13 +373,35 @@ runKMeans <- function(dat, datCols, gps=TRUE, completeVar, numClusters=2:8) {
 ```{r}
 soilCols <- names(soilDf)[grep("layer", names(soilDf))]
 
-soilClusters <- runKMeans(d, c(soilCols), gps=FALSE, completeVar = "pH_weighted_layer", numClusters)
+soilClusters <- runKMeans(soilDf, c(soilCols), completeVar = "pH_weighted_layer", numClusters)
 
 plot(numClusters, lapply(soilClusters, FUN=function(x) { sum(x$withinss) }),   
      type="b", ylab="average within cluster sum of square error",
-     main="Clustering weather and altitude at (basically) site level")
+     main="Clustering soil at 250m grid level")
 ```
 
-# Output
+# Map
+
+My hope is that I can just simply use ggplot to make a simple graph of the clusters to avoid having to actually plot them on a map. Let's see how this goes.
+
+```{r}
+mapKClusts <- function(kClusts, dat) {
+    gpsCols <- grep("x|y", names(dat))
+    tmp <- lapply(lapply(kClusts, FUN=function(kClust) {
+      kGps <- cbind(dat[,gpsCols], cluster=kClust$cluster)
+      ggplot(kGps, aes(x=x,
+             y=y,
+             color=as.factor(cluster))) + 
+        geom_point() + 
+        labs(title = paste0("k=", max(kGps$cluster)))
+    }), plot)
+    return(tmp)
+  }
+```
+
+```{r}
+mapKClusts(soilClusters, soilDf)
+```
+
 
 # Appendix
