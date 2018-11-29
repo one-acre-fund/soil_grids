@@ -427,7 +427,11 @@ runKMeansRaster <- function(dat, numClusters=2:8) {
 
 soilClusters <- runKMeansRaster(soilStack, numClusters)
 
-plot(numClusters, lapply(soilClusters, FUN=function(x) { sum(x[[2]]$withinss) }),   
+clusterRasters <- lapply(soilClusters, function(x){x[[1]]})
+
+soilKmeans <- lapply(soilClusters, function(x){x[[2]]})
+
+plot(numClusters, lapply(soilKmeans, FUN=function(x) { sum(x$withinss) }),   
      type="b", ylab="average within cluster sum of square error",
      main="Clustering soil at 250m grid level")
 ```
@@ -452,14 +456,6 @@ mapKClusts <- function(kClusts, dat) {
     return(tmp)
 }
 
-# bind all the scenario data into a single df
-scenarioDat <- do.call(rbind, lapply(soilClusters, function(clusterDat){
-  clusterDat[[2]]$totalCluster  = max(clusterDat[[2]]$cluster)
-  df <- cbind(cluster = clusterDat[[2]]$cluster, totalCluster = clusterDat[[2]]$totalCluster, soilDf)
-  return(df)
-  
-}))
-
 mapClusters <- function(dat, nClusters){
   gph <- dat %>%
     filter(totalCluster == nClusters) %>%
@@ -482,20 +478,6 @@ for(i in numClusters){
 > As you can see we're not getting clean delineation between zones on the map. This shouldn't be entirely surprising but it potentially complicates the process of placing trial officers.
 
 **Question:** Are we okay with the AEZ being non-contiguous? 
-
-## Clusters to raster
-
-Convert the cluster data to raster and add it into the `soilStack`.
-
-```{r}
-clusterRaster <- lapply(soilClusters, function(x){
-  clusterVar = as.matrix(x$cluster)
-  colnames(clusterVar) = NULL
-  r = raster(soilStack)
-  r = setValues(r, clusterVar)
-  return(r)
-})
-```
 
 
 # Site extraction
