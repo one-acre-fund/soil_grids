@@ -485,11 +485,13 @@ siteReproject <- spTransform(siteSp, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +
 fullStack <- stack(soilStack, stack(clusterRasters))
 
 siteClusterValues <- lapply(clusterRasters, function(x){
-  extract(x,
+  clusterVal <- extract(x,
           siteReproject,
           buffer = 10,
           fun = max,
           df = TRUE)
+  
+  return(data.frame(siteReproject, clusterVal))
 })
 
 # this takes too long to run
@@ -502,10 +504,8 @@ siteClusterValues <- lapply(clusterRasters, function(x){
 scenarioDat <- do.call(rbind, lapply(siteClusterValues, function(clusterDat){
   clusterDat$totalCluster  = max(clusterDat$layer, na.rm = T)
   return(clusterDat)
-}))
-
-names(siteClusterValues) <- c("ID", "cluster", "totalCluster")
-
+})) %>%
+  rename(cluster = layer)
 ```
 
 
@@ -513,17 +513,15 @@ names(siteClusterValues) <- c("ID", "cluster", "totalCluster")
 
 Summarize the clusters in each scenario
 
-```{r}
+I need to be able to extract the soil values for the site points in order to actually summarize the cluster values. That code was taking too long to run so I'm just summarizing the distribution of the clusters.
+
+```{r eval=FALSE, include=FALSE}
 scenarioDat %>%
   filter(!is.na(cluster)) %>%
   group_by(totalCluster, cluster) %>%
   summarise_at(vars(matches("layer")),
                funs(mean))
 ```
-
-**Interpretation and point of follow up**: The soil values coming from the soil grids data are not immediately interpretable and understanable to me. For instance, the pH values are not on the 1-14 scale we would expect. This is true of the original data as well. 
-
-> Step, can you reality check that these data are within the range we expect for the pH unit being used here?
 
 ## Ratio of points per cluster
 
