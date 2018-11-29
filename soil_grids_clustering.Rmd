@@ -108,9 +108,9 @@ weightList <- list(firstWeight, secondWeight, thirdWeight)
 ```{r}
 rawDir <- normalizePath(file.path("..", "soil_grids_raw_data"))
 
-datDir <- normalizePath(file.path("..", "soil_grids_data"))
+dataDir <- normalizePath(file.path("..", "soil_grids_data"))
 
-tifFiles <- paste0(rawDir, "/", list.files(dataDir, pattern = ".tif$"))
+tifFiles <- paste0(rawDir, "/", list.files(rawDir, pattern = ".tif$"))
 
 ```
 
@@ -121,10 +121,10 @@ The overall soil rasters are too big to do the calculations first (even if I'm d
 ## Kenya boundaries
 
 ```{r}
-if(!file.exists(paste0(outputDir, "/GADM_2.8_KEN_adm2.rds"))){
+if(!file.exists(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))){
   keBoundaries <- getData("GADM", country='KE', level=2, path = dataDir) 
 } else {
-  keBoundaries <- readRDS(paste0(outputDir, "/GADM_2.8_KEN_adm2.rds"))
+  keBoundaries <- readRDS(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))
 }
 
 ## transform the shape file to the correct CRS system
@@ -136,7 +136,7 @@ keBoundaries <- spTransform(keBoundaries, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_
 # from Name 1
 westernAreas <- c("Bungoma", "Busia", "Elgeyo-Marakwet", "Homa Bay", "Kakamega", "Kericho", "Kisii", "Kisumu", "Migori", "Nyamira", "Siaya", "Vihiga")
 
-westernMap <- keBoundaries[match(tolower(westernAreas), tolower(keBoundaries$NAME_1)),]
+westernMap <- keBoundaries[tolower(westernAreas) %in% tolower(keBoundaries$NAME_1),]
 
 plot(westernMap)
 ```
@@ -180,23 +180,21 @@ addWeights <- function(rasterList, weightList){
 
 ```{r}
 forceUpdate <- FALSE
-
-if(forceUpdate){
   
   # I can't hold all the raw data in memory so I'll run these one at a time and then only keep the analyzed results on the hd.
 
 # ph but with functions
-if(!file.exists(paste(datDir, "output", "pH_weighted_layer.tif", sep = "/")) | forceUpdate){
+if(!file.exists(paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/")) | forceUpdate){
   print("tried")
   pHLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_PHIHOX_T__M")), weightList)))
   
   writeRaster(pHLayer, file = paste(outputDir, "output", "pH_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
-  pHLayer <- raster(paste(datDir, "output", "pH_weighted_layer.tif", sep = "/"))
+  pHLayer <- raster(paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/"))
 }
 
 # carbon
-if(!file.exists(paste(datDir, "output", "carbon_weighted_layer.tif", sep = "/")) | forceUpdate){
+if(!file.exists(paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/")) | forceUpdate){
   carbonLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_ORCDRC_T__M")), weightList)))
   
   writeRaster(carbonLayer, file = paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
@@ -219,7 +217,7 @@ if(!file.exists(paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/")) 
   
   writeRaster(sandLayer, file = paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
-  
+  sandLayer <- raster(paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/"))
 }
 # silt content
 if(!file.exists(paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/")) | forceUpdate){
@@ -246,8 +244,8 @@ if(!file.exists(paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/")) |
   writeRaster(cecLayer, file = paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
   cecLayer <- raster(paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/"))
-  }
 }
+  
 ```
 
 ## Importing other layers
@@ -267,36 +265,116 @@ This summary repeats content from above:
     
 I'm importing these directly because it's not computationally intensive to do so.
 
+```{r eval=FALSE, include=FALSE}
+if(!file.exist(paste(dataDir, "output", "phosphorous_layer_projected.tif", sep = "/")) | forceUpdate){
+  phosLayer <- importRasterAsList(tifFinder("af250m_nutrient_p_t_m_agg30cm.tif"))[[1]]
+  phosLayer <- projectRaster(phosLayer, crs = "+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0")
+  writeRaster(phosLayer, file = paste(dataDir, "output", "phosphorous_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+} else {
+  phosLayer <- raster(paste(dataDir, "output", "phosphorous_layer_projected.tif", sep = "/"))
+}
+```
+
+
 ```{r}
 zoneTextureLayer <- importRasterAsList(tifFinder("af_agg_30cm_TEXCLSS__M_1km.tif"))[[1]]
-
-phosLayer <- importRasterAsList(tifFinder("af250m_nutrient_p_t_m_agg30cm.tif"))[[1]]
 
 zoneCoarseLayer <- importRasterAsList(tifFinder("af_agg_30cm_CRFVOL__M_1km.tif"))[[1]]
 
 zoneLayer <- importRasterAsList(tifFinder("af_ERZD__M_1km.tif"))[[1]]
 ```
 
-# Stacking data
+## Stacking data
+
+Align the extent of the weighted rasters with the other rasters so I can combine them into a single stack before making the clusters.
+
+**Crop the other rasters to the extent of the weighted rasters.**
 
 ```{r}
-soilStack <- stack(pHLayer, carbonLayer, textureLayer, sandLayer, clayLayer, cecLayer, zoneTextureLayer, phosLayer, zoneCoarseLayer, zoneLayer)
+weightedLayers <- c(pHLayer, carbonLayer, textureLayer, sandLayer, clayLayer, cecLayer)
+
+unweightedLayers <- c(zoneTextureLayer, zoneCoarseLayer, zoneLayer)
+
+# lapply(weightedLayers, function(x) extent(x))
+# 
+# lapply(unweightedLayers, function(x) extent(x))
+
+#phosLayer # this is in a different projection! convert!
+```
+
+And then check that the extent of the phosphorous layer is the same as the ohter layers so they can all fit in one stack together. **I'm currently excluding the phosphorous layer as it was taking forever to reproject in the right projection. Moving on!
+
+An option for a future update is to utilize a package like clusteR to run the re-projection arcoss multiple clusters. But not today!
+
+```{r}
+soilStack <- stack(weightedLayers, unweightedLayer)
 ```
 
 
 ## Cropping data
 
-`Crop` extent of the raster and then `mask` raster to fit the outlines of Kenya.
+`Crop` extent of the raster and then `mask` raster to fit the outlines of Kenya. Hopefully this doesn't take too long? Not too long! This step is necessary or else the raster is too big for the later steps. 
 
 ```{r}
-soilDat <- crop(soilStack, extent(keBoundaries))
+soilCrop <- crop(soilStack, extent(keBoundaries))
 
-soilDat <- mask(soilDat, keBoundaries)
+soilMask <- mask(soilCrop, keBoundaries)
 ```
 
 # Clustering Code
 
+The main steps here will be:
+
+* Convert the raster data to a data frame so that I can create the clusters
+* Use the existing k-means code to create clusters
+* Identify the tipping point in the graph
+
+This [website details the process of converting raster to data frame](https://www.rdocumentation.org/packages/raster/versions/2.8-4/topics/as.data.frame)
+
+And then per Step's requests:
+
+* How we should stratify our sampling across those clusters with our 9 trial officers
+* A list of site options for each trial officer. Site options need to be:
+    + away from cluster boundaries (e.g. create a shape file of each cluster, then trim 10% off margins)
+    + spread out as much as possible within the cluster (if we are assigning >1 trial officer to any cluster)
+    + ideally close to 2 other sites…if this is too much, if we have districts which are all well within any cluster, I think that might be enough for Kenya PI to work with for now.
+
+This converts the grids into points but in some way I don't really care what each point is called. But I need a way to connet each point back to something interpretable.
+
+```{r}
+soilDf <- raster::as.data.frame(soilMask, xy = TRUE, na.rm = TRUE)
+```
+
 # Clustering analysis
+
+```{r}
+numClusters <- 4:20
+
+runKMeans <- function(dat, datCols, gps=TRUE, completeVar, numClusters=2:8) {
+  # this function executes k-means clustering. I'm modifying it from the original code in the global_aez and country_aez R files to work with the raster data. This just works with the soil data in raster format. It might be better to functionize the input selection more but I'm just going to hardcode it for now.
+  # output - k means cluster assignments in list form
+  
+  kClusts <- lapply(numClusters, FUN=function(k) {
+    datA = dat[,c(datCols)]
+    datA = datA[!is.na(datA[,completeVar]),]
+    scaled <- scale(datA)
+    set.seed(2017201616)
+    kmeans(scaled, centers=k, nstart=50, iter.max=100)
+  })
+  return(kClusts)
+}
+
+```
+
+```{r}
+soilCols <- names(soilDf)[grep("layer", names(soilDf))]
+
+soilClusters <- runKMeans(d, c(soilCols), gps=FALSE, completeVar = "pH_weighted_layer", numClusters)
+
+plot(numClusters, lapply(soilClusters, FUN=function(x) { sum(x$withinss) }),   
+     type="b", ylab="average within cluster sum of square error",
+     main="Clustering weather and altitude at (basically) site level")
+```
 
 # Output
 
