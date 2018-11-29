@@ -390,27 +390,32 @@ soilDf <- raster::as.data.frame(soilStack, xy = TRUE)
 ```{r}
 numClusters <- 2:10
 
-runKMeans <- function(dat, datCols, completeVar, numClusters=2:8) {
+runKMeansRaster <- function(dat, numClusters=2:8) {
   # this function executes k-means clustering. I'm modifying it from the original code in the global_aez and country_aez R files to work with the raster data. This just works with the soil data in raster format. It might be better to functionize the input selection more but I'm just going to hardcode it for now.
   # the NA process will hopefully not complicate this too much considering that the NAs might go back in different places in each file.
-  # output - k means cluster assignments in list form with the NAs in place so that I can convert the data back to raster
+  # input >> raster stack, 
+  # output - list of two items, k means cluster assignments in raster form and the kmeans output so I can analyze which scenario is the best
+  datA = values(dat)
+  #datA = datA[,c(datCols)]
+  
+  idx = complete.cases(datA)
+  
+  datB = datA[idx,]
+  scaled <- scale(datB)
   
   kClusts <- lapply(numClusters, FUN=function(k) {
-    datA = dat[,c(datCols)]
     
-    matNa <- as.data.frame(is.na(datA))
-    matNa$isComplete <- complete.cases(matNa)
-    
-    
-    datA = datA[!is.na(datA[,completeVar]),]
-    
-    
-    scaled <- scale(datA)
     set.seed(2017201616)
-    kmeanRes = kmeans(scaled, centers=k, nstart=50, iter.max=100)
+    clusterRes = kmeans(scaled, centers=k, nstart=50, iter.max=100)
     
-    # and then return a similarly sized matrix / df
-    matNa[!is.na(matNa)] <- kmeanRes$cluster
+    # initiate new holding vector for output that's the same size as the original raster stack
+    kmClustRes = vector(mode = 'integer', length = ncell(dat))
+    kmClustRes[!idx] <- NA
+    kmClustRes[idx] <- clusterRes$cluster
+    
+    clusterRaster <- raster(dat[[1]])
+    values(clusterRaster) <- kmClustRes
+    return(list(clusterRaster, clusterRes))
   })
   return(kClusts)
 }
@@ -418,11 +423,11 @@ runKMeans <- function(dat, datCols, completeVar, numClusters=2:8) {
 ```
 
 ```{r}
-soilCols <- names(soilDf)[!names(soilDf) %in% c("x", "y")]
+#soilCols <- names(soilStack)[!names(soilStack) %in% c("x", "y")]
 
-soilClusters <- runKMeans(soilDf, c(soilCols), completeVar = "pH", numClusters)
+soilClusters <- runKMeansRaster(soilStack, numClusters)
 
-plot(numClusters, lapply(soilClusters, FUN=function(x) { sum(x$withinss) }),   
+plot(numClusters, lapply(soilClusters, FUN=function(x) { sum(x[[2]]$withinss) }),   
      type="b", ylab="average within cluster sum of square error",
      main="Clustering soil at 250m grid level")
 ```
@@ -447,9 +452,10 @@ mapKClusts <- function(kClusts, dat) {
     return(tmp)
 }
 
+# bind all the scenario data into a single df
 scenarioDat <- do.call(rbind, lapply(soilClusters, function(clusterDat){
-  clusterDat$totalCluster  = max(clusterDat$cluster)
-  df <- cbind(cluster = clusterDat$cluster, totalCluster = clusterDat$totalCluster, soilDf)
+  clusterDat[[2]]$totalCluster  = max(clusterDat[[2]]$cluster)
+  df <- cbind(cluster = clusterDat[[2]]$cluster, totalCluster = clusterDat[[2]]$totalCluster, soilDf)
   return(df)
   
 }))
@@ -546,11 +552,11 @@ ratioTab <- scenarioDat %>%
 kable(ratioTab, format = 'markdown')
 ```
 
-Then the 6 AEZ scenario:
+Then the 3 and 6 AEZ scenario:
 
 ```{r}
 ratioTab %>%
-  filter(totalCluster == 6) %>%
+  filter(totalCluster == 6 | totalCluster == 3) %>%
   group_by(totalCluster, cluster) %>%
   mutate(officerCount = round(freq * 9,1)) %>%
   kable(., format = 'markdown')
