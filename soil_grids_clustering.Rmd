@@ -428,6 +428,10 @@ for(i in 2:10){
 
 ```
 
+> As you can see we're not getting clean delineation between zones on the map. This shouldn't be entirely surprising but it potentially complicates the process of placing trial officers.
+
+**Question:** Are we okay with the AEZ being non-contiguous? 
+
 # Summary
 
 Summarize the clusters in each scenario
@@ -443,9 +447,33 @@ scenarioDat %>%
 
 > Step, can you reality check that these data are within the range we expect for the pH unit being used here?
 
-# Trial placement
+## Ratio of points per cluster
 
-> It's also not clear to me what 1AF specific unit I should be using to determine where trial officers should go. 
+First, let's look at all:
+
+```{r}
+ratioTab <- scenarioDat %>%
+  group_by(totalCluster, cluster) %>%
+  summarize(n = n()) %>%
+  mutate(freq = n / sum(n),
+         freq = paste0(round(freq,2) * 100, "%"))
+
+kable(ratioTab, format = 'markdown')
+```
+
+Then the 6 AEZ scenario:
+
+```{r}
+ratioTab %>%
+  filter(totalCluster == 6) %>%
+  kable(., format = 'markdown')
+```
+
+## Trial placement
+
+> If we have 9 trial officers, ~11% coverage equals a single trial officer. This would mean that we have 3 in the 4th zone, ~2 in the first zone, 1 in the 5th zone, ~2 in the 6th zone, and 1 in the second and third zones. That equals 10 so we'd need to probably take one officer from one of the in between zones and assign them to one of the smaller zones.
+
+Or we could drop one of the smaller zones and consolidate.
 
 Should I bring in site GPS to determine the soil profiles of each site? That seems like the most actionable version of this but that would take away the benefit of the broader coverage of raster data. The next steps as I can best project them are:
 
