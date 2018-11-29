@@ -179,23 +179,23 @@ addWeights <- function(rasterList, weightList){
 ```
 
 ```{r}
-forceUpdate <- FALSE
+forceUpdate <- TRUE
   
   # I can't hold all the raw data in memory so I'll run these one at a time and then only keep the analyzed results on the hd.
 
 # ph but with functions
 if(!file.exists(paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/")) | forceUpdate){
   print("tried")
-  pHLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_PHIHOX_T__M")), weightList)))
+  pHLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_PHIHOX_T__M")), weightList)))
   
-  writeRaster(pHLayer, file = paste(outputDir, "output", "pH_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+  writeRaster(pHLayer, file = paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
   pHLayer <- raster(paste(dataDir, "output", "pH_weighted_layer.tif", sep = "/"))
 }
 
 # carbon
 if(!file.exists(paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/")) | forceUpdate){
-  carbonLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_ORCDRC_T__M")), weightList)))
+  carbonLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_ORCDRC_T__M")), weightList)))
   
   writeRaster(carbonLayer, file = paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -204,7 +204,7 @@ if(!file.exists(paste(dataDir, "output", "carbon_weighted_layer.tif", sep = "/")
 
 # texture
 if(!file.exists(paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/")) | forceUpdate){
-  textureLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_TEXMHT_T__M")), weightList)))
+  textureLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_TEXMHT_T__M")), weightList)))
   
   writeRaster(textureLayer, file = paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -213,7 +213,7 @@ if(!file.exists(paste(dataDir, "output", "texture_weighted_layer.tif", sep = "/"
 
 # sand content
 if(!file.exists(paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/")) | forceUpdate){
-  sandLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_SNDPPT_T__M")), weightList)))
+  sandLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_SNDPPT_T__M")), weightList)))
   
   writeRaster(sandLayer, file = paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -221,7 +221,7 @@ if(!file.exists(paste(dataDir, "output", "sand_weighted_layer.tif", sep = "/")) 
 }
 # silt content
 if(!file.exists(paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/")) | forceUpdate){
-  siltLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_SLTPPT_T__M")), weightList)))
+  siltLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_SLTPPT_T__M")), weightList)))
   
   writeRaster(siltLayer, file = paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -230,7 +230,7 @@ if(!file.exists(paste(dataDir, "output", "silt_weighted_layer.tif", sep = "/")) 
 
 # clay content
 if(!file.exists(paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/")) | forceUpdate){
-  clayLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_CLYPPT_T__M")), weightList)))
+  clayLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_CLYPPT_T__M")), weightList)))
   
   writeRaster(clayLayer, file = paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -239,7 +239,7 @@ if(!file.exists(paste(dataDir, "output", "clay_weighted_layer.tif", sep = "/")) 
 
 # CEC
 if(!file.exists(paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/")) | forceUpdate){
-  cecLayer <- mean(stack(addWeights(importRasterAsList(tifFinder("af_CEC_T__M")), weightList)))
+  cecLayer <- sum(stack(addWeights(importRasterAsList(tifFinder("af_CEC_T__M")), weightList)))
   
   writeRaster(cecLayer, file = paste(dataDir, "output", "cec_weighted_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
@@ -261,6 +261,8 @@ This summary repeats content from above:
     + **af_agg_30cm_CRFVOL__M_1km.tif**
 * Africa SoilGrids root zone (derived maps for rootable depth (cm), and other properties aggregated over 0-30 cm as well as over root zone depth, at 1 km resolution 
     + **af_ERZD__M_1km.tif**
+* Africa SoilGrids total N 2017 (predictions for TN (mg/kg) for 0-30 cm   
+    + **af250m_nutrient_n_m_agg30cm.tif**
     
     
 I'm importing these directly because it's not computationally intensive to do so.
@@ -282,6 +284,8 @@ zoneTextureLayer <- importRasterAsList(tifFinder("af_agg_30cm_TEXCLSS__M_1km.tif
 zoneCoarseLayer <- importRasterAsList(tifFinder("af_agg_30cm_CRFVOL__M_1km.tif"))[[1]]
 
 zoneLayer <- importRasterAsList(tifFinder("af_ERZD__M_1km.tif"))[[1]]
+
+nitrogenLayer <- importRasterAsList(tifFinder("af250m_nutrient_n_m_agg30cm.tif"))[[1]]
 ```
 
 ## Stacking data
@@ -431,6 +435,18 @@ for(i in 2:10){
 > As you can see we're not getting clean delineation between zones on the map. This shouldn't be entirely surprising but it potentially complicates the process of placing trial officers.
 
 **Question:** Are we okay with the AEZ being non-contiguous? 
+
+# Site extraction
+
+I'll use the 2019 site GPS to identify and then extract the site value of each cluster to facilitate assignment of trial officers. This means that after clustering I need to convert the cluster data back into raster so that I can extract the values for the GPS points. Additionally, I need to convert the provided site GPS points to the correct projection (from no projection? Figure out how to do this.)
+
+```{r}
+siteGpsFiles <- list.files(paste(dataDir, "2019", sep = "/"), pattern = ".xls")
+
+siteGpsFiles <- siteGpsFiles[!siteGpsFiles %in% c("District Offices.xlsx", "Regional Office.xlsx", "Warehouses.xlsx")]
+
+```
+
 
 # Summary
 
