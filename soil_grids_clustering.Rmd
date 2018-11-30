@@ -537,13 +537,11 @@ ratioTab %>%
 
 The table above shows the rough breakdown of trial officers across the AEZs. The breakdowns are obviously imprecise but can suggest where we should place trial officers.
 
-## Example sites for each AEZ
-
 It'll be a bit difficult to empirically identify sites that are 'more' of one AEZ than others. The table below lets you explore which sites appear in which clusters. I'm also going to output the full excel file to allow you to filter the data yourself.
 
 ```{r}
 scenarioDat %>%
-  filter(totalCluster ==3) %>%
+  filter(totalCluster == 3) %>%
   select(-c(Latitude, Latitude.1, Longitude, Longitude.1, Accuracy, optional, ID)) %>%
 datatable(., filter = 'top', options = list(
   searching = TRUE,
