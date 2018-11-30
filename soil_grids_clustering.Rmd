@@ -99,7 +99,7 @@ the weights refer to the depth intervals :
 * 15-30 = 15/30 - this refers to `sd3` in the file names
 
 ```{r}
-forceUpdate <- TRUE
+forceUpdate <- FALSE
 
 firstWeight <- 5/30
 secondWeight <- 10/30
@@ -141,15 +141,10 @@ readGpsFiles <- lapply(siteGpsFiles, function(x){
 combineGpsFiles <- as.data.frame(do.call(rbind, readGpsFiles))
 
 # investigate the projection of these data points
-siteSp <- SpatialPointsDataFrame(coords = combineGpsFiles[,c("Longitude", "Latitude")], data = combineGpsFiles, proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+siteSp <- SpatialPointsDataFrame(coords = combineGpsFiles[,c("Longitude", "Latitude")], data = combineGpsFiles, proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")) # use this to get the right map for N and P
 
 siteReproject <- spTransform(siteSp, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
 ```
-
-```{r}
-intersect(siteReproject, test)
-```
-
 
 ## Kenya boundaries
 
@@ -163,27 +158,11 @@ if(!file.exists(paste0(dataDir, "/GADM_2.8_KEN_adm2.rds"))){
 }
 
 # I additionally want to subset this down to just western Kenya because it's too computationally intentsive to run these calculations for other areas. I'm going to subset the shape file to just western Kenya and the plot it to confirm I've done it correctly.
-keBoundaries <- spTransform(keBoundaries, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+mapNandP <- intersect(keBoundaries, siteSp)
 
+keTransform <- spTransform(keBoundaries, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
 
-westernMap <- intersect(keBoundaries, siteReproject)
-
-# from Name 1
-westernAreas <- c("Bungoma", "Busia", "Homa Bay", "Kakamega", "Kericho", "Kisii", "Kisumu", "Migori", "Nyamira", "Siaya", "Vihiga", "Kiambu", "Bomet", "Meru", "Nakuru", "Nandi", "Tharaka-Nithi", "Narok", "Nyeri", "Embu", "Kirinyaga", "Uasin Gishu")
-
-westernMap <- keBoundaries[tolower(keBoundaries$NAME_1) %in% tolower(westernAreas),]
-
-plot(westernMap)
-
-westernMapOriginal <- westernMap # keep an untransformed version of the truncated shape file to work with N and P
-
-## transform the shape file to the correct CRS system
-westernMap <- spTransform(westernMap, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
-
-```
-
-```{r eval=FALSE, include=FALSE}
-plot(keBoundaries)
+westernMap <- intersect(keTransform, siteReproject) # need to intersect keBoundariesOriginal map for N and P
 ```
 
 ## Applying weights
@@ -214,8 +193,6 @@ addWeights <- function(rasterList, weightList){
     return(r)
   
 }
-
-
 ```
 
 ## Cropping data
@@ -223,17 +200,6 @@ addWeights <- function(rasterList, weightList){
 `Crop` extent of the raster and then `mask` raster to fit the outlines of Kenya. Hopefully this doesn't take too long? Not too long! This step is necessary or else the raster is too big for the later steps. 
 
 ```{r}
-# test
-# rf <- importRasterAsList(tifFinder("af_PHIHOX_T__M"))
-# 
-# rfcropped <- lapply(rf, function(x){
-#   crop(x, extent(westernMap))
-# })
-# 
-# rfmask <- lapply(rfcropped, function(x){
-#   mask(x, westernMap)
-# })
-
 getKenyaValues <- function(rasterList, map){
   # this function trims the africa sized raster down to just the extent in western Kenya we care about
   # output: a list of rasters to go into the weight calculations
@@ -246,7 +212,6 @@ getKenyaValues <- function(rasterList, map){
 
 #soilExtract <- extract(soilMask, westernMap, df = TRUE) # gets soil values for each of the 87 shapes in the westernMap
 ```
-
 
 ```{r}
 # I can't hold all the raw data in memory so I'll run these one at a time and then only keep the analyzed results on the hd.
@@ -343,7 +308,7 @@ The nitrogen and phosphorous layers are coming in with different projections. I'
 ```{r}
 if(!file.exists(paste(dataDir, "output", "phosphorous_layer_projected.tif", sep = "/")) | forceUpdate){
   
-  phosLayer <- getKenyaValues(importRasterAsList(tifFinder("af250m_nutrient_p_t_m_agg30cm.tif")), westernMapOriginal)[[1]] 
+  phosLayer <- getKenyaValues(importRasterAsList(tifFinder("af250m_nutrient_p_t_m_agg30cm.tif")), mapNandP)[[1]] 
   phosLayer <- projectRaster(phosLayer, pHLayer)
   
   writeRaster(phosLayer, file = paste(dataDir, "output", "phosphorous_layer.tif", sep = "/"), format="GTiff", overwrite=TRUE)
@@ -354,17 +319,14 @@ if(!file.exists(paste(dataDir, "output", "phosphorous_layer_projected.tif", sep 
 
 if(!file.exists(paste(dataDir, "output", "nitrogen_layer_projected.tif", sep = "/")) | forceUpdate){
   
-  nitrogenLayer <- getKenyaValues(importRasterAsList(tifFinder("af250m_nutrient_n_m_agg30cm.tif")), westernMapOriginal)[[1]] 
+  nitrogenLayer <- getKenyaValues(importRasterAsList(tifFinder("af250m_nutrient_n_m_agg30cm.tif")), mapNandP)[[1]] 
   # and then reproject it to the right system
-nitrogenLayer <- projectRaster(nitrogenLayer, pHLayer)
+  nitrogenLayer <- projectRaster(nitrogenLayer, pHLayer)
   
   writeRaster(nitrogenLayer, file = paste(dataDir, "output", "nitrogen_layer_projected.tif", sep = "/"), format="GTiff", overwrite=TRUE)
 } else {
   nitrogenLayer <- raster(paste(dataDir, "output", "nitrogen_layer_projected.tif", sep = "/"))
 }
-
-
-
 ```
 
 Time is short so I want to just set the extent of these additional layers to that of the weighted layers. I may be doing something wrong but I don't think I am.
@@ -439,7 +401,7 @@ runKMeansRaster <- function(dat, numClusters=2:8) {
   kClusts <- lapply(numClusters, FUN=function(k) {
     
     set.seed(2017201616)
-    clusterRes = kmeans(scaled, centers=k, nstart=50, iter.max=100)
+    clusterRes = kmeans(scaled, centers=k, nstart=50, iter.max=150, algorithm = "MacQueen")
     
     # initiate new holding vector for output that's the same size as the original raster stack
     kmClustRes = vector(mode = 'integer', length = ncell(dat))
@@ -455,9 +417,11 @@ runKMeansRaster <- function(dat, numClusters=2:8) {
 
 ```
 
+Address [runtime error in kmeans with `gc()`](https://stackoverflow.com/questions/21382681/kmeans-quick-transfer-stage-steps-exceeded-maximum) or possibly other solutions if need be.
+
 ```{r}
 #soilCols <- names(soilStack)[!names(soilStack) %in% c("x", "y")]
-
+gc()
 if(!file.exists(paste(dataDir, "soilClusters.rds", sep = "/")) | forceUpdate){
   soilClusters <- runKMeansRaster(soilStack, numClusters)
   saveRDS(soilClusters, paste(dataDir, "soilClusters.rds", sep = "/"))
@@ -529,6 +493,7 @@ Summarize the clusters in each scenario. There are some sites that are not found
 ```{r}
 scenarioDat %>%
   filter(totalCluster == 2) %>%
+  filter(!is.na(cluster)) %>%
   ggplot(., aes(x = Longitude.1, y = Latitude.1, color = as.factor(cluster))) + 
   geom_point()
 ```
@@ -564,7 +529,7 @@ Then the 3 AEZ scenario
 
 ```{r}
 ratioTab %>%
-  filter(dim(totalCluster == 3) %>%
+  filter(totalCluster == 3) %>%
   kable(., format = 'markdown')
 ```
 
