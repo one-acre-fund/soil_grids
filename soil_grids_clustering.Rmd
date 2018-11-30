@@ -42,7 +42,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 # cowplot is for adding subtitles to plots
 # robustbase is to run robust regressions to compensate for outliers
 # car is for performing logit transformations
-libs <- c("tidyverse", "knitr", "readxl", "curl", "raster", "rgdal", "ggmap")
+libs <- c("tidyverse", "knitr", "readxl", "curl", "raster", "rgdal", "ggmap", "DT")
 lapply(libs, require, character.only = T, quietly = T, warn.conflicts = F)
 
 #### define helpful functions
@@ -536,6 +536,26 @@ ratioTab %>%
 ## Trial placement
 
 The table above shows the rough breakdown of trial officers across the AEZs. The breakdowns are obviously imprecise but can suggest where we should place trial officers.
+
+## Example sites for each AEZ
+
+It'll be a bit difficult to empirically identify sites that are 'more' of one AEZ than others. The table below lets you explore which sites appear in which clusters. I'm also going to output the full excel file to allow you to filter the data yourself.
+
+```{r}
+scenarioDat %>%
+  filter(totalCluster ==3) %>%
+  select(-c(Latitude, Latitude.1, Longitude, Longitude.1, Accuracy, optional, ID)) %>%
+datatable(., filter = 'top', options = list(
+  searching = TRUE,
+  pageLength = 20
+))
+```
+
+```{r}
+scenarioDat %>% write.csv(., file=paste(dataDir, "siteAssignment.csv", sep = "/"))
+
+```
+
 
 
 
