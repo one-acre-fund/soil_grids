@@ -349,8 +349,16 @@ And then check that the extent of the phosphorous layer is the same as the ohter
 An option for a future update is to utilize a package like clusteR to run the re-projection arcoss multiple clusters. But not today!
 
 ```{r, fig.height=6, fig.width=6}
-soilStack <- stack(pHLayer, carbonLayer, sandLayer, clayLayer, siltLayer, cecLayer, nitrogenLayer, phosLayer, zoneTextureLayer, zoneCoarseLayer, zoneLayer)
-names(soilStack) <- c("pH", "carbon", "sand", "clay", "silt", "cec", "nitrogen", "phosphorous", "zoneTexture", "zoneCoarse", "zone")
+checkExtent <- extent(pHLayer)
+
+lapply(list(carbonLayer, sandLayer, clayLayer, siltLayer, cecLayer, nitrogenLayer, phosLayer, zoneTextureLayer, zoneCoarseLayer, zoneLayer), function(soil_layer){
+  return(extent(soil_layer) == checkExtent)
+})
+
+# remove phosLayer from the soil stack but I'll eventually want to come back and figure this out
+
+soilStack <- stack(pHLayer, carbonLayer, sandLayer, clayLayer, siltLayer, cecLayer, nitrogenLayer, zoneTextureLayer, zoneCoarseLayer, zoneLayer)
+names(soilStack) <- c("pH", "carbon", "sand", "clay", "silt", "cec", "nitrogen", "zoneTexture", "zoneCoarse", "zone")
 plot(soilStack)
 ```
 
