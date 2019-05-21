@@ -1,0 +1,589 @@
+---
+author: '[Johnna Sundberg](mailto:johnna.sundberg@oneacrefund.org)'
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+output:
+  html_document:
+    code_folding: hide
+    theme: flatly
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+    css: static/styles.css
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+#### set up
+## clear environment and console
+rm(list = ls())
+cat("\014")
+
+## set up some global options
+# always set stringsAsFactors = F when loading data
+options(stringsAsFactors=FALSE)
+
+# show the code
+knitr::opts_chunk$set(echo = TRUE)
+
+# define all knitr tables to be html format
+options(knitr.table.format = 'html')
+
+# change code chunk default to not show warnings or messages
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+## load libraries
+# dplyr and tibble are for working with tables
+# reshape is for easy table transformation
+# knitr is to make pretty tables at the end
+# ggplot2 is for making graphs
+# readxl is for reading in Excel files
+# MASS is for running boxcox tests
+# gridExtra is for arranging plots
+# cowplot is for adding subtitles to plots
+# robustbase is to run robust regressions to compensate for outliers
+# car is for performing logit transformations
+libs <- c("tidyverse", "knitr", "readxl", "curl", "raster", "rgdal", "ggmap", "DT")
+lapply(libs, require, character.only = T, quietly = T, warn.conflicts = F)
+
+#### define helpful functions
+# define function to adjust table widths
+html_table_width <- function(kable_output, width) {
+  width_html <- paste0(paste0('<col width="', width, '">'), collapse = "\n")
+  sub("<table>", paste0("<table>\n", width_html), kable_output)
+}
+options(readr.show_progress = FALSE)
+select <- dplyr::select
+```
+
+# Objectives
+
+This document will take the raw soil grids files and use the Kenya clustering code in order to add in soil data to the Burundi clusters.
+
+# Data
+
+* Africa SoilGrids pH (predictions for pH H2O (10) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_PHIHOX_T__M_sd1_250m.tif**
+* Africa SoilGrids organic C (predictions for SOC (g/kg) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_ORCDRC_T__M_sd1_250m.tif**
+* Africa SoilGrids total N 2017 (predictions for TN (mg/kg) for 0-30 cm   
+    + **af250m_nutrient_n_m_agg30cm.tif**
+* Africa SoilGrids texture (textural classes derived from predictions for sand, silt & clay for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_TEXMHT_T__M_sd1_250m.tif**
+* Africa SoilGrids root zone texture (textural classes derived from predictions for sand, silt & clay for 0-30 cm (also available for the rootable depth) with a resolution of 1km 
+    + **af_agg_30cm_TEXCLSS__M_1km.tif**
+* Africa SoilGrids sand (predictions for sand content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_SNDPPT_T__M_sd1_250m.tif**
+* Africa SoilGrids silt (predictions for silt content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_SLTPPT_T__M_sd1_250m.tif**
+* Africa SoilGrids clay (predictions for clay content (w%) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_CLYPPT_T__M_sd1_250m.tif**
+* Africa SoilGrids CEC (predictions for CEC (cmolc/kg) for individual depth intervals (0-5, 5-15, 15-30 cm); make weighted average 
+    + **af_CEC_T__M_sd1_250m.tif**
+* Africa SoilGrids P (predictions for available P, according to Mehlich 3 (mg/100kg; thus divide by 100 for ppm) for 0-30 cm 
+* Africa SoilGrids P (predictions for total P (mg/kg) for 0-30 cm         
+    + **af250m_nutrient_p_t_m_agg30cm.tif**
+* Africa SoilGrids root zone coarse (predictions for coarse fragments content (v%) for 0-30 cm (also for rootable depth) at 1km resolution 
+    + **af_agg_30cm_CRFVOL__M_1km.tif**
+* Africa SoilGrids root zone (derived maps for rootable depth (cm), and other properties aggregated over 0-30 cm as well as over root zone depth, at 1 km resolution 
+    + **af_ERZD__M_1km.tif**
+
+And Johan clarified that the weights refer to amount of soil depth:
+the weights refer to the depth intervals :
+
+* 0-5 = 5/30 - this refers to `sd1` in the file names
+* 5-15 = 10/30 - this refers to `sd2` in the file names
+* 15-30 = 15/30 - this refers to `sd3` in the file names
+
+```{r}
+forceUpdate <- FALSE
+
+firstWeight <- 5/30
+secondWeight <- 10/30
+thirdWeight <- 15/30
+
+weightList <- list(firstWeight, secondWeight, thirdWeight)
+```
+
+
+```{r}
+
+rawDir <- normalizePath(file.path("..", "soil_grids_raw_data"))
+
+dataDir <- normalizePath(file.path("..", "soil_grids_data"))
+
+tifFiles <- paste0(rawDir, "/", list.files(rawDir, pattern = ".tif$"))
+
+```
+
+I want to import all of these rasters but it's important that they be clearly grouped so that I can create weighted layers for all N, C, P, etc. before combining them into a single data frame. The following functions will import the selected rasters then perform the necessary calculations to prepare that soil nutrient feature for the end analysis.
+
+The overall soil rasters are too big to do the calculations with all the data loaded. Therefore I first need to trim the larger raster down to just Kenya before calculating the weights and averages.
+
+## Burundi borders
+
+Determine the Burundi boundaries we need by using `intersect`.
+
+```{r}
+
+# getting top level boundary (country outline) for Buurndi
+if(!file.exists(paste0(dataDir, "/GADM_2.8_BDI_adm1.rds"))){
+  bdiBoundaries <- getData("GADM", country='BDI', level=1, path = dataDir) 
+} else {
+  bdiBoundaries <- readRDS(paste0(dataDir, "/GADM_2.8_BDI_adm1.rds"))
+}
+
+# projecting to the same projection Matt had for Kenya
+bdiReproject <- spTransform(bdiBoundaries, CRS("+proj=laea +lat_0=5 +lon_0=20 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+
+```
+
+## Applying weights
+
+```{r}
+
+tifFinder <- function(input){
+  # finds the right layers from the full set of input data, tifFiles
+  #outputs list of those files.
+  tifFiles[grep(input, tifFiles)]
+}
+
+
+importRasterAsList <- function(listInput){
+  # import the relevant files for the soil layer
+  # outputs a raster list
+  rasterFile = lapply(listInput, function(x) raster(x))
+}
+
+addWeights <- function(rasterList, weightList){
+  
+  # confirm that this approach gives the same result as doing it manually.
+  # confirmed that this is leading to same result!
+  
+  # make sure it's in order!
+    r = Map("*", rasterList, weightList)
+    return(r)
+  
+}
+```
+
+## Cropping data
+
+`Crop` extent of the raster and then `mask` raster to fit the outlines of Kenya.
+
+```{r}
+
+getBDIValues <- function(rasterList, map){
+  # this function trims the africa sized raster down to just the extent we care about
+  # output: a list of rasters to go into the weight calculations
+  # this cna also be used on a single raster but it'll then return 
+  rlCropped <- lapply(rasterList, function(x){crop(x, extent(map))})
+  rlMask <- lapply(rlCropped, function(x){mask(x, map)})
+  
+  return(rlMask)
+}
+
+```
+
+```{r}
+
+forceUpdate <- FALSE
+
+# ph but with functions
+if(!file.exists(paste(dataDir, "output", "pH_weighted_layer_BDI.tif", sep = "/")) | forceUpdate){
+  
+  print("tried")
+  
+  pHLayer <- sum(stack(addWeights(getBDIValues(importRasterAsList(tifFinder("af_PHIHOX_T__M")), 
+                                               bdiReproject), weightList)))
+  
+  writeRaster(pHLayer, file = paste(dataDir, "output", "pH_weighted_layer_BDI.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+  
+} else {
+  pHLayer <- raster(paste(dataDir, "output", "pH_weighted_layer_BDI.tif", sep = "/"))
+}
+
+
+
+
+# carbon
+if(!file.exists(paste(dataDir, "output", "carbon_weighted_layer_BDI.tif", sep = "/")) | forceUpdate){
+  
+  carbonLayer <- sum(stack(addWeights(getBDIValues(importRasterAsList(tifFinder("af_ORCDRC_T__M")),
+                                                   bdiReproject), weightList)))
+  
+  writeRaster(carbonLayer, file = paste(dataDir, "output", "carbon_weighted_layer_BDI.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+  
+} else {
+  
+  carbonLayer <- raster(paste(dataDir, "output", "carbon_weighted_layer_BDI.tif", sep = "/"))
+  
+}
+
+
+
+# texture
+if(!file.exists(paste(dataDir, "output", "texture_weighted_layer_BDI.tif", sep = "/")) | forceUpdate){
+  
+  textureLayer <- sum(stack(addWeights(getBDIValues(importRasterAsList(tifFinder("af_TEXMHT_T__M")),
+                                                    bdiReproject), weightList)))
+  
+  writeRaster(textureLayer, file = paste(dataDir, "output", "texture_weighted_layer_BDI.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+  
+} else {
+  textureLayer <- raster(paste(dataDir, "output", "texture_weighted_layer_BDI.tif", sep = "/"))
+}
+
+
+
+
+
+
+
+# sand content
+if(!file.exists(paste(dataDir, "output", "sand_weighted_layer_BDI.tif", sep = "/")) | forceUpdate){
+  
+  sandLayer <- sum(stack(addWeights(getBDIValues(importRasterAsList(tifFinder("af_SNDPPT_T__M")),
+                                                 bdiReproject), weightList)))
+  
+  writeRaster(sandLayer, file = paste(dataDir, "output", "sand_weighted_layer_BDI.tif", sep = "/"),
+              format="GTiff", overwrite=TRUE)
+} else {
+  sandLayer <- raster(paste(dataDir, "output", "sand_weighted_layer_BDI.tif", sep = "/"))
+}
+
+
+
+
+
+# silt content
+if(!file.exists(paste(dataDir, "output", "silt_weighted_layer_BDI.tif", sep = "/")) | forceUpdate){
+  
+  siltLayer <- sum(stack(addWeights(getBDIValues(importRasterAsList(tifFinder("af_SLTPPT_T__M")),
+                                                   bdiReproject), weightList)))
+  
+  writeRaster(siltLayer, file = paste(dataDir, "output", "silt_weighted_layer_BDI.tif", sep = "/"),
+              format="GTiff", overwrite=TRUE)
+  
+} else {
+  
+  siltLayer <- raster(paste(dataDir, "output", "silt_weighted_layer_BDI.tif", sep = "/"))
+  
+}
+
+
+
+
+
+
+# clay content
+if(!file.exists(paste(dataDir, "output", "clay_weighted_layer_BDI.tif", sep = "/")) | forceUpdate){
+  
+  clayLayer <- sum(stack(addWeights(getBDIValues(importRasterAsList(tifFinder("af_CLYPPT_T__M")),
+                                                   bdiReproject), weightList)))
+  
+  writeRaster(clayLayer, file = paste(dataDir, "output", "clay_weighted_layer_BDI.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+  
+} else {
+  
+  clayLayer <- raster(paste(dataDir, "output", "clay_weighted_layer_BDI.tif", sep = "/"))
+  
+}
+
+
+
+
+
+
+
+
+# CEC
+if(!file.exists(paste(dataDir, "output", "cec_weighted_layer_BDI.tif", sep = "/")) | forceUpdate){
+  
+  cecLayer <- sum(stack(addWeights(getBDIValues(importRasterAsList(tifFinder("af_CEC_T__M")),
+                                                  bdiReproject), weightList)))
+  
+  writeRaster(cecLayer, file = paste(dataDir, "output", "cec_weighted_layer_BDI.tif", sep = "/"),
+              format="GTiff", overwrite=TRUE)
+  
+} else {
+  
+  cecLayer <- raster(paste(dataDir, "output", "cec_weighted_layer_BDI.tif", sep = "/"))
+  
+}
+  
+```
+
+## Importing other layers
+
+This summary repeats content from above:
+
+* Africa SoilGrids root zone texture (textural classes derived from predictions for sand, silt & clay for 0-30 cm (also available for the rootable depth) with a resolution of 1km 
+    + **af_agg_30cm_TEXCLSS__M_1km.tif**
+* Africa SoilGrids P (predictions for available P, according to Mehlich 3 (mg/100kg; thus divide by 100 for ppm) for 0-30 cm 
+* Africa SoilGrids P (predictions for total P (mg/kg) for 0-30 cm         
+    + **af250m_nutrient_p_t_m_agg30cm.tif**
+* Africa SoilGrids root zone coarse (predictions for coarse fragments content (v%) for 0-30 cm (also for rootable depth) at 1km resolution 
+    + **af_agg_30cm_CRFVOL__M_1km.tif**
+* Africa SoilGrids root zone (derived maps for rootable depth (cm), and other properties aggregated over 0-30 cm as well as over root zone depth, at 1 km resolution 
+    + **af_ERZD__M_1km.tif**
+* Africa SoilGrids total N 2017 (predictions for TN (mg/kg) for 0-30 cm   
+    + **af250m_nutrient_n_m_agg30cm.tif**
+    
+    
+I'm importing these directly because it's not computationally intensive to do so.
+
+## N and P
+
+The nitrogen and phosphorous layers are coming in with different projections. I'm going to import them here and see if I can truncate them as need be using the original, untransformed shape file.
+
+*These projectsions are the same as the default GDAM projections.*
+
+```{r}
+
+if(!file.exists(paste(dataDir, "output", "phosphorous_layer_projected_BDI.tif", sep = "/")) | forceUpdate){
+
+  phosLayer <- getBDIValues(importRasterAsList(tifFinder("af250m_nutrient_p_t_m_agg30cm.tif")),
+                            bdiBoundaries)[[1]] 
+  
+  phosLayer <- projectRaster(phosLayer, pHLayer)
+  
+  writeRaster(phosLayer, file = paste(dataDir, "output", "phosphorous_layer_projected_BDI.tif", sep = "/"),
+              format="GTiff", overwrite=TRUE)
+  
+} else {
+  
+  phosLayer <- raster(paste(dataDir, "output", "phosphorous_layer_projected_BDI.tif", sep = "/"))
+  
+}
+
+
+if(!file.exists(paste(dataDir, "output", "nitrogen_layer_projected_BDI.tif", sep = "/")) | forceUpdate){
+  
+  nitrogenLayer <- getBDIValues(importRasterAsList(tifFinder("af250m_nutrient_n_m_agg30cm.tif")),
+                                bdiBoundaries)[[1]] 
+
+  
+  nitrogenLayer <- projectRaster(nitrogenLayer, pHLayer)
+  
+  writeRaster(nitrogenLayer, file = paste(dataDir, "output", "nitrogen_layer_projected_BDI.tif", sep = "/"), format="GTiff", overwrite=TRUE)
+  
+} else {
+  
+  nitrogenLayer <- raster(paste(dataDir, "output", "nitrogen_layer_projected_BDI.tif", sep = "/"))
+  
+}
+
+
+
+
+zoneTextureLayer <- getBDIValues(importRasterAsList(tifFinder("af_agg_30cm_TEXCLSS__M_1km.tif")), bdiReproject)[[1]]
+
+zoneTextureLayer <- projectRaster(zoneTextureLayer, pHLayer)
+
+zoneCoarseLayer <- getBDIValues(importRasterAsList(tifFinder("af_agg_30cm_CRFVOL__M_1km.tif")), bdiReproject)[[1]]
+
+zoneCoarseLayer <- projectRaster(zoneCoarseLayer, pHLayer)
+
+zoneLayer <- getBDIValues(importRasterAsList(tifFinder("af_ERZD__M_1km.tif")), bdiReproject)[[1]]
+zoneLayer <- projectRaster(zoneLayer, pHLayer)
+
+```
+
+
+
+### Stacking data
+
+```{r, fig.height=6, fig.width=6}
+
+checkExtent <- extent(pHLayer)
+
+lapply(list(carbonLayer, sandLayer, clayLayer, siltLayer, cecLayer, nitrogenLayer, phosLayer, zoneTextureLayer, zoneCoarseLayer, zoneLayer), function(soil_layer){
+  return(extent(soil_layer) == checkExtent)
+})
+
+
+soilStack <- stack(pHLayer, carbonLayer, sandLayer, clayLayer, siltLayer, cecLayer, phosLayer, nitrogenLayer, zoneTextureLayer, zoneCoarseLayer, zoneLayer)
+names(soilStack) <- c("pH", "carbon", "sand", "clay", "silt", "cec", "phosphorous", "nitrogen", "zoneTexture", "zoneCoarse", "zone")
+plot(soilStack)
+
+```
+
+# Burundi Clustering
+
+This section will create country-wide clusters using the soil data at the 250 m level.
+
+```{r bdi.clustering}
+
+numClusters <- 2:10
+
+runKMeansRaster <- function(dat, numClusters=2:8) {
+  # this function executes k-means clustering. I'm modifying it from the original code in the global_aez and country_aez R files to work with the raster data. This just works with the soil data in raster format. It might be better to functionize the input selection more but I'm just going to hardcode it for now.
+  # the NA process will hopefully not complicate this too much considering that the NAs might go back in different places in each file.
+  # input >> raster stack, 
+  # output - list of two items, k means cluster assignments in raster form and the kmeans output so I can analyze which scenario is the best
+  datA = values(dat)
+  #datA = datA[,c(datCols)]
+  
+  idx = complete.cases(datA)
+  
+  datB = datA[idx,]
+  scaled <- scale(datB)
+  
+  kClusts <- lapply(numClusters, FUN=function(k) {
+    
+    set.seed(2017201616)
+    clusterRes = kmeans(scaled, centers=k, nstart=50, iter.max=100)
+    
+    # initiate new holding vector for output that's the same size as the original raster stack
+    kmClustRes = vector(mode = 'integer', length = ncell(dat))
+    kmClustRes[!idx] <- NA
+    kmClustRes[idx] <- as.factor(clusterRes$cluster)
+    
+    clusterRaster <- raster(dat[[1]])
+    values(clusterRaster) <- kmClustRes
+    return(list(clusterRaster, clusterRes))
+  })
+  return(kClusts)
+}
+
+
+
+````
+
+
+````{r}
+
+if(!file.exists(paste(dataDir, "soilBDIClusters.rds", sep = "/")) | forceUpdate){
+  
+  soilClusters <- runKMeansRaster(soilStack, numClusters)
+  saveRDS(soilClusters, paste(dataDir, "soilBDIClusters.rds", sep = "/"))
+  
+} else {
+  
+  soilClusters <- readRDS(paste(dataDir, "soilBDIClusters.rds", sep = "/"))
+  
+}
+
+clusterRasters <- lapply(soilClusters, function(x){x[[1]]})
+
+soilKmeans <- lapply(soilClusters, function(x){x[[2]]})
+
+plot(numClusters, lapply(soilKmeans, FUN=function(x) { sum(x$withinss) }),   
+     type="b", ylab="average within cluster sum of square error",
+     main="Clustering soil at 250m grid level")
+
+
+```
+<br><br>
+
+Like Kenya, the most obvious elbow seems to be at `3` clusters.
+
+# Cluster Map
+
+```{r}
+
+for(i in 1:length(clusterRasters)) {
+  #values(clusterRasters[[i]]) <- as.factor(values(clusterRasters[[i]]))
+  
+  print(plot(clusterRasters[[i]]))
+  
+}
+
+```
+
+## Mapping Sites to Clusters
+
+In this section, I will use the 2018A Burundi GPS coordinates and map each site to one of the **3** soil clustesr.
+
+Also want to re-iterate Matt's earlier question that he raised in the <a href="https://one-acre-fund.github.io/soil_grids/soil_grids_clustering.nb.html#5_map">KE study</a>: **Are we okay with the AEZ being non-contiguous?**
+
+We can look into contiguous clustering in the future, like the algorithm that GAES used.
+
+### 2 soil clusters
+
+```{r}
+
+# importing BDI site data and converting it to a spatial dataframe.
+
+bdiSiteCoords <- read_csv("burundiGPSUpdated.csv")
+
+crdref <- CRS('+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0')
+
+# converting to spatial dataframe, projecting to same CRS as Raster maps
+bdiSiteSp <- SpatialPointsDataFrame(coords = bdiSiteCoords[,c("lon", "lat")], 
+                                 data = bdiSiteCoords, 
+                                 proj4string = crdref)
+
+bdiSiteSpProjected <- spTransform(bdiSiteSp, CRS(projection(clusterRasters[[1]])))
+
+bdiSite2Clusters <- extract(clusterRasters[[1]],
+          bdiSiteSpProjected,
+          na.rm = TRUE,
+          fun = mean)
+
+bdi2ClusterScenario <- cbind(bdiSiteSpProjected@data, bdiSite2Clusters)
+
+bdi2ClusterScenario %>%
+  ggplot(., aes(x = lon, y = lat, color = as.factor(bdiSite2Clusters))) + 
+  geom_point()
+
+```
+
+
+### 3 soil clusters
+
+```{r}
+
+# importing BDI site data and converting it to a spatial dataframe.
+
+bdiSite3Clusters <- extract(clusterRasters[[2]],
+          bdiSiteSpProjected,
+          na.rm = TRUE,
+          fun = mean)
+
+bdi3ClusterScenario <- cbind(bdiSiteSpProjected@data, bdiSite3Clusters)
+
+bdi3ClusterScenario %>%
+  ggplot(., aes(x = lon, y = lat, color = as.factor(bdiSite3Clusters))) + 
+  geom_point()
+
+```
+
+
+### 4 soil clusters
+
+```{r}
+
+# importing BDI site data and converting it to a spatial dataframe.
+
+bdiSite4Clusters <- extract(clusterRasters[[3]],
+          bdiSiteSpProjected,
+          na.rm = TRUE,
+          fun = mean)
+
+bdi4ClusterScenario <- cbind(bdiSiteSpProjected@data, bdiSite4Clusters)
+
+bdi4ClusterScenario %>%
+  ggplot(., aes(x = lon, y = lat, color = as.factor(bdiSite4Clusters))) + 
+  geom_point()
+
+```
+
+
+> Interpretation: I think that the 2 cluster map is the cleanest representation, so I will use that for now.
+
+```{r}
+
+bdiSiteCoordsUpdated <- write.csv(bdi2ClusterScenario, "BurundiCoordswClusters.csv")
+
+```
+
+
+
+
+
+
+
